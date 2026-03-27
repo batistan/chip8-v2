@@ -1,5 +1,5 @@
 use crate::{Emulator, EmulatorError};
-use crate::consts::{ADDR_MASK, IMM_MASK, OPCODE_SIZE};
+use crate::consts::{ADDR_MASK, FONT_OFFSET, IMM_MASK, OPCODE_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 impl Emulator {
     pub(crate) fn execute(&mut self, inst: u16) -> Result<(), EmulatorError> {
@@ -12,7 +12,8 @@ impl Emulator {
 
         match nibs {
             (0x0, 0x0, 0xE, 0x0) => { // clear screen
-                self.screen = [0u8; 64 * 32];
+                self.screen = [0u8; SCREEN_WIDTH * SCREEN_HEIGHT];
+                self.draw = true;
                 Ok(())
             }
             (0x0, 0x0, 0xE, 0xE) => self.ret(),
@@ -39,6 +40,17 @@ impl Emulator {
             (0xB, _, _, _) => self.jmp_imm(inst & ADDR_MASK),
             (0xC, reg, _, _) => self.rand(reg as u8, (inst & IMM_MASK) as u8),
             (0xD, reg1, reg2, height) => self.draw(reg1 as u8, reg2 as u8, height as u8),
+            (0xE, reg, 0x9, 0xE) => self.skip_if_pressed(reg as u8),
+            (0xE, reg, 0xA, 0x1) => self.skip_if_not_pressed(reg as u8),
+            (0xF, reg, 0x0, 0x7) => self.load_delay_timer(reg as u8),
+            (0xF, reg, 0x0, 0xA) => self.await_key_press(reg as u8),
+            (0xF, reg, 0x1, 0x5) => self.set_delay_timer(reg as u8),
+            (0xF, reg, 0x1, 0x8) => self.set_sound_timer(reg as u8),
+            (0xF, reg, 0x1, 0xE) => self.add_index(reg as u8),
+            (0xF, reg, 0x2, 0x9) => self.set_index_for_font(reg as u8),
+            (0xF, reg, 0x3, 0x3) => self.store_bcd(reg as u8),
+            (0xF, reg, 0x5, 0x5) => self.dump_registers(reg as u8),
+            (0xF, reg, 0x6, 0x5) => self.load_registers(reg as u8),
 
             _ => Err(EmulatorError::UnknownOpcode(inst)),
         }
@@ -88,28 +100,19 @@ impl Emulator {
     }
 
     fn load_imm(&mut self, register: u8, imm: u8) -> Result<(), EmulatorError> {
-        if register > (self.reg.len() - 1) as u8 {
-            return Err(EmulatorError::InvalidRegister { register });
-        }
-
+        self.validate_register(register)?;
         self.reg[register as usize] = imm;
         Ok(())
     }
 
     fn add_imm(&mut self, register: u8, imm: u8) -> Result<(), EmulatorError> {
-        if register > (self.reg.len() - 1) as u8 {
-            return Err(EmulatorError::InvalidRegister { register });
-        }
-
+        self.validate_register(register)?;
         self.reg[register as usize] = self.reg[register as usize].wrapping_add(imm);
         Ok(())
     }
 
     fn skip_if_eq(&mut self, register: u8, imm: u8) -> Result<(), EmulatorError> {
-        if register > (self.reg.len() - 1) as u8 {
-            return Err(EmulatorError::InvalidRegister { register });
-        }
-
+        self.validate_register(register)?;
         if self.reg[register as usize] == imm {
             self.pc += OPCODE_SIZE as u16;
         }
@@ -122,10 +125,7 @@ impl Emulator {
     }
 
     fn skip_if_not_eq(&mut self, register: u8, imm: u8) -> Result<(), EmulatorError> {
-        if register > (self.reg.len() - 1) as u8 {
-            return Err(EmulatorError::InvalidRegister { register });
-        }
-
+        self.validate_register(register)?;
         if self.reg[register as usize] != imm {
             self.pc += OPCODE_SIZE as u16;
         }
@@ -261,33 +261,187 @@ impl Emulator {
     }
 
     fn rand(&mut self, register: u8, mask: u8) -> Result<(), EmulatorError> {
-        if register > (self.reg.len() - 1) as u8 {
-            return Err(EmulatorError::InvalidRegister { register });
-        }
-
+        self.validate_register(register)?;
         self.reg[register as usize] = self.rng.next_u8() & mask;
         Ok(())
     }
 
     fn draw(&mut self, reg1: u8, reg2: u8, height: u8) -> Result<(), EmulatorError> {
-        // self.validate_registers(reg1, reg2)?;
-        //
-        // let buff = &self.mem[self.index as usize.. height as usize];
-        //
-        // buff.iter().enumerate().for_each(|(y, row)| {
-        // });
-        // Ok(())
-        todo!()
+        self.validate_registers(reg1, reg2)?;
+        let x = self.reg[reg1 as usize] as usize;
+        let y = self.reg[reg2 as usize] as usize;
+
+        let start_addr = self.index as usize;
+
+        self.reg[0xF] = 0;
+        for row in 0..height as usize {
+            if start_addr + row > self.mem.len() - 1 {
+                return Err(EmulatorError::MemoryOutOfBounds { address: (start_addr + row) as u16 });
+            }
+
+            let byte = self.mem[start_addr + row];
+
+            // notably, one pixel is a bit of the byte in memory,
+            // but each pixel is one byte of the screen (yes, a whole byte just for 0 or 1),
+            // so we need to shift the byte to the correct position
+            for col in 0..8u8 {
+                let bit = (byte >> (7 - col)) & 0x1; // & 0x1 will set LSB and 0 all other bits
+                // we only need to care about this bit if it's 1
+                if bit == 0 { continue; }
+
+                // modulo to allow screen wrapping,
+                // expected behavior by many ROMs
+                let pixel_x = (x + col as usize) % SCREEN_WIDTH;
+                let pixel_y = (y + row) % SCREEN_HEIGHT;
+
+                let screen_idx = pixel_y * SCREEN_WIDTH + pixel_x;
+
+                // we will only get here if the bit is 1, so we don't need to compare before/after
+                if self.screen[screen_idx] == 1 {
+                    self.reg[0xF] = 1;
+                }
+
+                // see comment above; this line only runs if the bit is 1
+                self.screen[screen_idx] ^= 1;
+            }
+        }
+
+        // if we drew anything, we need to update the screen
+        // we don't need to check every pixel; just update the screen if we tried to draw anything
+        // if redraws are very expensive, consider adding a flag in the loop for this
+        self.draw = height > 0;
+        Ok(())
     }
 
-    fn validate_registers(&self, reg1: u8, reg2: u8) -> Result<(), EmulatorError> {
-        if reg1 > (self.reg.len() - 1) as u8 {
-            return Err(EmulatorError::InvalidRegister { register: reg1 });
+    fn skip_if_pressed(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        let key = self.reg[reg as usize];
+
+        if key as usize >= self.keys.len() {
+            return Err(EmulatorError::InvalidKey { key });
         }
-        if reg2 > (self.reg.len() - 1) as u8 {
-            return Err(EmulatorError::InvalidRegister { register: reg2 });
+
+        if self.keys[key as usize] {
+            self.pc += OPCODE_SIZE as u16;
         }
 
         Ok(())
+    }
+
+    fn skip_if_not_pressed(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        let key = self.reg[reg as usize];
+
+        if key as usize >= self.keys.len() {
+            return Err(EmulatorError::InvalidKey { key });
+        }
+
+        if !self.keys[key as usize] {
+            self.pc += OPCODE_SIZE as u16;
+        }
+
+        Ok(())
+    }
+
+    fn load_delay_timer(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        self.reg[reg as usize] = self.delay_timer;
+        Ok(())
+    }
+
+    fn await_key_press(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        self.waiting_input = true;
+        self.waiting_reg = reg as usize;
+
+        Ok(())
+    }
+
+    fn set_delay_timer(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        self.delay_timer = self.reg[reg as usize];
+        Ok(())
+    }
+
+    fn set_sound_timer(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        self.sound_timer = self.reg[reg as usize];
+        Ok(())
+    }
+
+    fn add_index(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        self.index += self.reg[reg as usize] as u16;
+        Ok(())
+    }
+
+    fn set_index_for_font(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        // each character is 5 bytes (8 px wide, 5 px tall).
+        // they're all packed together in the font set,
+        // so the memory index is the index of the first byte of the first character
+        // plus the index of the register (0-F) times 5 (the number of bytes in a character).
+        // see font.rs for a visual representation
+        // cast self.reg[reg as usize] to usize to avoid overflow or panic on multiplying by 5
+        // 0x33 * 5 is 0xFF, max value for u8
+        // so if self.reg[reg] has any value greater than 0x33, this line would overflow.
+        // a ROM doing this is a bug, since characters can only be 0-F, but it can happen.
+        self.index = (FONT_OFFSET + (self.reg[reg as usize] as usize * 5)) as u16;
+
+        Ok(())
+    }
+
+    fn store_bcd(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+        if self.index as usize + 2 >= self.mem.len() {
+            return Err(EmulatorError::MemoryOutOfBounds { address: self.index + 2 });
+        }
+
+        let bcd = self.reg[reg as usize];
+        self.mem[self.index as usize] = bcd / 100;
+        self.mem[self.index as usize + 1] = (bcd / 10) % 10;
+        self.mem[self.index as usize + 2] = bcd % 10;
+
+        Ok(())
+    }
+
+    fn dump_registers(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+
+        if self.index as usize + reg as usize >= self.mem.len() {
+            return Err(EmulatorError::MemoryOutOfBounds { address: self.index + reg as u16 });
+        }
+
+        for i in 0..=reg as usize {
+            self.mem[self.index as usize + i] = self.reg[i];
+        }
+
+        Ok(())
+    }
+
+    fn load_registers(&mut self, reg: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg)?;
+
+        if self.index as usize + reg as usize >= self.mem.len() {
+            return Err(EmulatorError::MemoryOutOfBounds { address: self.index + reg as u16 });
+        }
+
+        for i in 0..=reg as usize {
+            self.reg[i] = self.mem[self.index as usize + i];
+        }
+
+        Ok(())
+    }
+
+    fn validate_register(&self, reg: u8) -> Result<(), EmulatorError> {
+        if reg as usize >= self.reg.len() {
+            return Err(EmulatorError::InvalidRegister { register: reg });
+        }
+        Ok(())
+    }
+
+    fn validate_registers(&self, reg1: u8, reg2: u8) -> Result<(), EmulatorError> {
+        self.validate_register(reg1)?;
+        self.validate_register(reg2)
     }
 }

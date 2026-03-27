@@ -1,4 +1,4 @@
-use crate::consts::{FONT_OFFSET, PC_START};
+use crate::consts::{FONT_OFFSET, PC_START, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 pub trait RandomSource {
     fn next_u8(&mut self) -> u8;
@@ -14,14 +14,15 @@ pub enum EmulatorError {
     StackOverflow,
     StackUnderflow,
     MemoryOutOfBounds { address: u16 },
-    InvalidRegister { register: u8}
+    InvalidRegister { register: u8 },
+    InvalidKey { key: u8 },
 }
 
 pub struct Emulator {
     rng: Box<dyn RandomSource>,
     mem: [u8; 4096],
     stack: [u16; 16],
-    screen: [u8; 64 * 32],
+    screen: [u8; SCREEN_WIDTH * SCREEN_HEIGHT],
     draw: bool, // whether to update the screen this tick
 
     keys: [bool; 16], // 0-F keys, true if pressed, false otherwise
