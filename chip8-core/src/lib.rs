@@ -50,7 +50,7 @@ impl Emulator {
             rng,
             mem,
             stack: [0u16; 16],
-            screen: [0u8; 64 * 32],
+            screen: [0u8; SCREEN_WIDTH * SCREEN_HEIGHT],
             draw: false,
             keys: [false; 16],
             waiting_input: false,
@@ -65,6 +65,7 @@ impl Emulator {
             cpu_hz: 500.0,
         }
     }
+
     pub fn load_rom(&mut self, data: &[u8]) -> Result<(), EmulatorError> {
         if data.len() > self.mem.len() - PC_START {
             return Err(EmulatorError::MemoryOutOfBounds { address: (PC_START + data.len()) as u16 });
@@ -78,7 +79,64 @@ impl Emulator {
     }
 
     pub fn tick(&mut self, delta_ms: f64) -> Result<TickOutput, EmulatorError> {
-        todo!()
+        self.draw = false;
+
+        // number of cycles is number seconds * cpu clock speed (cycles / second)
+        let num_cycles = ((delta_ms / 1000.0) * self.cpu_hz) as u32;
+
+        let mut should_update_screen = false;
+
+        for _ in 0..num_cycles {
+            if self.waiting_input {
+                self.check_keys();
+            } else {
+                self.execute(self.next_instruction()?)?;
+                if self.draw { should_update_screen = true; }
+
+                self.pc += 2;
+            }
+
+        }
+
+        self.update_timers(delta_ms);
+
+        Ok(TickOutput {
+            screen_updated: should_update_screen,
+            sound_active: self.sound_timer > 0,
+        })
+    }
+
+    fn next_instruction(&self) -> Result<u16, EmulatorError> {
+        if self.pc + 2 > self.mem.len() as u16 {
+            return Err(EmulatorError::MemoryOutOfBounds { address: self.pc });
+        }
+
+        // instructions are 2 bytes long, so we read 2 bytes at a time
+        let inst_msb = self.mem[self.pc as usize] as u16;
+        let inst_lsb = self.mem[(self.pc + 1) as usize] as u16;
+
+        Ok(inst_msb << 8 | inst_lsb)
+    }
+
+    fn check_keys(&mut self) {
+        for i in 0..self.keys.len() {
+            if self.keys[i] {
+                self.reg[self.waiting_reg] = i as u8;
+                self.waiting_input = false;
+                return;
+            }
+        }
+    }
+
+    // timers decrement at 60 Hz regardless of CPU speed
+    fn update_timers(&mut self, delta_ms: f64) {
+        self.timer_accum += delta_ms / 1000.0;
+        while self.timer_accum >= 1.0 / 60.0 {
+            if self.delay_timer > 0 { self.delay_timer -= 1; };
+            if self.sound_timer > 0 { self.sound_timer -= 1; };
+
+            self.timer_accum -= 1.0 / 60.0;
+        }
     }
 
     pub fn key_down(&mut self, key: u8) {
