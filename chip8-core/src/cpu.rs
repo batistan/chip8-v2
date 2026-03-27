@@ -445,3 +445,688 @@ impl Emulator {
         self.validate_register(reg2)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::RandomSource;
+    use super::*;
+
+    struct FixedRng(u8);
+
+    impl RandomSource for FixedRng {
+        fn next_u8(&mut self) -> u8 { self.0 }
+    }
+
+    fn emulator(fixed_rng: FixedRng) -> Emulator {
+        Emulator::new(Box::new(fixed_rng))
+    }
+
+    // --- Clear Screen (00E0) ---
+
+    #[test]
+    fn test_clear() {
+        let mut emulator = emulator(FixedRng(0));
+
+        emulator.execute(0x00E0).unwrap();
+        assert_eq!(emulator.screen, [0; SCREEN_WIDTH * SCREEN_HEIGHT]);
+
+        emulator.screen[5] = 1;
+        emulator.screen[100] = 1;
+
+        emulator.execute(0x00E0).unwrap();
+
+        assert_eq!(emulator.screen, [0; SCREEN_WIDTH * SCREEN_HEIGHT]);
+    }
+
+    // --- Draw (DXYN) ---
+
+    #[test]
+    fn test_draw() {
+        let mut emulator = emulator(FixedRng(0));
+
+        // draw 8 pixels starting at (x, y) = (1, 1)
+        emulator.reg[0x5] = 0x1;
+        emulator.reg[0x6] = 0x1;
+        emulator.reg[0xF] = 0;
+
+        emulator.index = 0x200;
+        emulator.mem[0x200] = 0b11111111;
+
+        emulator.execute(0xD561).unwrap();
+
+        // second row starts at idx 64
+        // second col starts at idx 1
+        // 64 + 1 = 65, and we drew 8 bits of 1 starting at that index
+        assert_eq!(&emulator.screen[65..73], &[1; 8]);
+        // collision flag should NOT be set
+        assert_eq!(emulator.reg[0xF], 0);
+        assert!(emulator.draw);
+
+        // draw those pixels again, this time we expect the screen to be turned to 0
+        emulator.execute(0xD561).unwrap();
+
+        assert_eq!(&emulator.screen[65..73], &[0; 8]);
+        // since the pixels were already drawn, they should have been unset
+        // so the collision flag should be set
+        assert_eq!(emulator.reg[0xF], 1);
+        assert!(emulator.draw);
+    }
+
+    #[test]
+    fn test_draw_wrap() {
+        let mut emulator = emulator(FixedRng(0));
+
+        // x-wrap: draw at (x, y) = (64, 1), wraps to (0, 1)
+        emulator.reg[0x5] = SCREEN_WIDTH as u8;
+        emulator.reg[0x6] = 0x1;
+
+        emulator.index = 0x200;
+        emulator.mem[0x200] = 0b11111111;
+
+        emulator.execute(0xD561).unwrap();
+
+        assert_eq!(&emulator.screen[64..72], &[1; 8]);
+        assert_eq!(emulator.reg[0xF], 0);
+        assert!(emulator.draw);
+
+        // y-wrap: draw at (x, y) = (1, 32), wraps to (1, 0)
+        emulator.screen = [0; SCREEN_WIDTH * SCREEN_HEIGHT];
+        emulator.reg[0x5] = 0x1;
+        emulator.reg[0x6] = SCREEN_HEIGHT as u8;
+
+        emulator.execute(0xD561).unwrap();
+
+        // row 0, starting at column 1
+        assert_eq!(&emulator.screen[1..9], &[1; 8]);
+        assert_eq!(emulator.reg[0xF], 0);
+    }
+
+    #[test]
+    fn test_draw_oob_memory() {
+        let mut emulator = emulator(FixedRng(0));
+        emulator.reg[0] = 0;
+        emulator.reg[1] = 0;
+        emulator.index = 4095;
+        // height=2: row 0 reads mem[4095] (valid), row 1 reads mem[4096] (OOB)
+        assert!(matches!(emulator.execute(0xD012), Err(EmulatorError::MemoryOutOfBounds { .. })));
+    }
+
+    // --- Stack: Call (2NNN) + Ret (00EE) ---
+
+    #[test]
+    fn test_call_and_ret() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+
+        emu.execute(0x2300).unwrap();
+        assert_eq!(emu.sp, 1);
+        assert_eq!(emu.stack[0], initial_pc);
+        assert_eq!(emu.pc, 0x300 - OPCODE_SIZE as u16);
+
+        emu.execute(0x00EE).unwrap();
+        assert_eq!(emu.sp, 0);
+        assert_eq!(emu.pc, initial_pc);
+    }
+
+    #[test]
+    fn test_call_nested() {
+        let mut emu = emulator(FixedRng(0));
+
+        emu.execute(0x2300).unwrap();
+        emu.execute(0x2400).unwrap();
+        assert_eq!(emu.sp, 2);
+
+        emu.execute(0x00EE).unwrap();
+        assert_eq!(emu.sp, 1);
+        assert_eq!(emu.pc, 0x300 - OPCODE_SIZE as u16);
+
+        emu.execute(0x00EE).unwrap();
+        assert_eq!(emu.sp, 0);
+    }
+
+    #[test]
+    fn test_stack_overflow() {
+        let mut emu = emulator(FixedRng(0));
+        emu.sp = 16;
+        assert!(matches!(emu.execute(0x2300), Err(EmulatorError::StackOverflow)));
+    }
+
+    #[test]
+    fn test_stack_underflow() {
+        let mut emu = emulator(FixedRng(0));
+        assert!(matches!(emu.execute(0x00EE), Err(EmulatorError::StackUnderflow)));
+    }
+
+    // --- Jump (1NNN) ---
+
+    #[test]
+    fn test_jump() {
+        let mut emu = emulator(FixedRng(0));
+        emu.execute(0x1300).unwrap();
+        // jump subtracts OPCODE_SIZE so tick's pc += 2 lands on the target
+        assert_eq!(emu.pc, 0x300 - OPCODE_SIZE as u16);
+    }
+
+    // --- Jump + V0 (BNNN) ---
+
+    #[test]
+    fn test_jmp_imm() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x10;
+        emu.execute(0xB300).unwrap();
+        assert_eq!(emu.pc, 0x300 - OPCODE_SIZE as u16 + 0x10);
+    }
+
+    #[test]
+    fn test_jmp_imm_oob() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0xFF;
+        // 0xFFF is valid alone, but 0xFFF - 2 + 0xFF = 4348 exceeds memory
+        assert!(matches!(emu.execute(0xBFFF), Err(EmulatorError::MemoryOutOfBounds { .. })));
+    }
+
+    // --- Skip Instructions ---
+
+    #[test]
+    fn test_skip_if_eq_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x42;
+        emu.execute(0x3042).unwrap();
+        assert_eq!(emu.pc, initial_pc + OPCODE_SIZE as u16);
+    }
+
+    #[test]
+    fn test_skip_if_eq_no_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x41;
+        emu.execute(0x3042).unwrap();
+        assert_eq!(emu.pc, initial_pc);
+    }
+
+    #[test]
+    fn test_skip_if_not_eq_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x41;
+        emu.execute(0x4042).unwrap();
+        assert_eq!(emu.pc, initial_pc + OPCODE_SIZE as u16);
+    }
+
+    #[test]
+    fn test_skip_if_not_eq_no_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x42;
+        emu.execute(0x4042).unwrap();
+        assert_eq!(emu.pc, initial_pc);
+    }
+
+    #[test]
+    fn test_skip_if_compare_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x42;
+        emu.reg[1] = 0x42;
+        emu.execute(0x5010).unwrap();
+        assert_eq!(emu.pc, initial_pc + OPCODE_SIZE as u16);
+    }
+
+    #[test]
+    fn test_skip_if_compare_no_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x42;
+        emu.reg[1] = 0x43;
+        emu.execute(0x5010).unwrap();
+        assert_eq!(emu.pc, initial_pc);
+    }
+
+    #[test]
+    fn test_skip_if_not_compare_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x42;
+        emu.reg[1] = 0x43;
+        emu.execute(0x9010).unwrap();
+        assert_eq!(emu.pc, initial_pc + OPCODE_SIZE as u16);
+    }
+
+    #[test]
+    fn test_skip_if_not_compare_no_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x42;
+        emu.reg[1] = 0x42;
+        emu.execute(0x9010).unwrap();
+        assert_eq!(emu.pc, initial_pc);
+    }
+
+    #[test]
+    fn test_skip_oob() {
+        let mut emu = emulator(FixedRng(0));
+        emu.pc = 4094;
+        emu.reg[0] = 0x42;
+        // skip condition met → pc becomes 4096 > 4095 → OOB
+        assert!(matches!(emu.execute(0x3042), Err(EmulatorError::MemoryOutOfBounds { .. })));
+    }
+
+    // --- Load Immediate (6XNN) ---
+
+    #[test]
+    fn test_load_imm() {
+        let mut emu = emulator(FixedRng(0));
+        emu.execute(0x6042).unwrap();
+        assert_eq!(emu.reg[0], 0x42);
+    }
+
+    // --- Add Immediate (7XNN) ---
+
+    #[test]
+    fn test_add_imm() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x10;
+        emu.execute(0x7020).unwrap();
+        assert_eq!(emu.reg[0], 0x30);
+    }
+
+    #[test]
+    fn test_add_imm_wraps() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0xFF;
+        emu.execute(0x7001).unwrap();
+        assert_eq!(emu.reg[0], 0x00);
+    }
+
+    // --- Register Operations (8XY_) ---
+
+    #[test]
+    fn test_copy_reg() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[1] = 0x42;
+        emu.execute(0x8010).unwrap();
+        assert_eq!(emu.reg[0], 0x42);
+    }
+
+    #[test]
+    fn test_or_reg() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x0F;
+        emu.reg[1] = 0xF0;
+        emu.execute(0x8011).unwrap();
+        assert_eq!(emu.reg[0], 0xFF);
+    }
+
+    #[test]
+    fn test_and_reg() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x0F;
+        emu.reg[1] = 0xF0;
+        emu.execute(0x8012).unwrap();
+        assert_eq!(emu.reg[0], 0x00);
+    }
+
+    #[test]
+    fn test_xor_reg() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0xFF;
+        emu.reg[1] = 0x0F;
+        emu.execute(0x8013).unwrap();
+        assert_eq!(emu.reg[0], 0xF0);
+    }
+
+    // --- Arithmetic with Flags (8XY4, 8XY5, 8XY7) ---
+
+    #[test]
+    fn test_add_reg_no_carry() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x10;
+        emu.reg[1] = 0x20;
+        emu.execute(0x8014).unwrap();
+        assert_eq!(emu.reg[0], 0x30);
+        assert_eq!(emu.reg[0xF], 0);
+    }
+
+    #[test]
+    fn test_add_reg_carry() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0xFF;
+        emu.reg[1] = 0x02;
+        emu.execute(0x8014).unwrap();
+        assert_eq!(emu.reg[0], 0x01);
+        assert_eq!(emu.reg[0xF], 1);
+    }
+
+    #[test]
+    fn test_sub_reg_no_borrow() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x20;
+        emu.reg[1] = 0x10;
+        emu.execute(0x8015).unwrap();
+        assert_eq!(emu.reg[0], 0x10);
+        assert_eq!(emu.reg[0xF], 1); // VF=1 means no borrow
+    }
+
+    #[test]
+    fn test_sub_reg_borrow() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x10;
+        emu.reg[1] = 0x20;
+        emu.execute(0x8015).unwrap();
+        assert_eq!(emu.reg[0], 0xF0);
+        assert_eq!(emu.reg[0xF], 0); // VF=0 means borrow occurred
+    }
+
+    #[test]
+    fn test_sub_reg_inverse_no_borrow() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x10;
+        emu.reg[1] = 0x20;
+        // VX = VY - VX = 0x20 - 0x10 = 0x10
+        emu.execute(0x8017).unwrap();
+        assert_eq!(emu.reg[0], 0x10);
+        assert_eq!(emu.reg[0xF], 1);
+    }
+
+    #[test]
+    fn test_sub_reg_inverse_borrow() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x20;
+        emu.reg[1] = 0x10;
+        // VX = VY - VX = 0x10 - 0x20 = underflow
+        emu.execute(0x8017).unwrap();
+        assert_eq!(emu.reg[0], 0xF0);
+        assert_eq!(emu.reg[0xF], 0);
+    }
+
+    // --- Shifts (8XY6, 8XYE) ---
+
+    #[test]
+    fn test_shift_right_lsb_set() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0b00000011;
+        emu.execute(0x8016).unwrap();
+        assert_eq!(emu.reg[0], 0b00000001);
+        assert_eq!(emu.reg[0xF], 1);
+    }
+
+    #[test]
+    fn test_shift_right_lsb_clear() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0b00000010;
+        emu.execute(0x8016).unwrap();
+        assert_eq!(emu.reg[0], 0b00000001);
+        assert_eq!(emu.reg[0xF], 0);
+    }
+
+    #[test]
+    fn test_shift_left_msb_set() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0b10000001;
+        emu.execute(0x801E).unwrap();
+        assert_eq!(emu.reg[0], 0b00000010);
+        assert_eq!(emu.reg[0xF], 1);
+    }
+
+    #[test]
+    fn test_shift_left_msb_clear() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0b01000000;
+        emu.execute(0x801E).unwrap();
+        assert_eq!(emu.reg[0], 0b10000000);
+        assert_eq!(emu.reg[0xF], 0);
+    }
+
+    // --- Set Index (ANNN) ---
+
+    #[test]
+    fn test_set_index_imm() {
+        let mut emu = emulator(FixedRng(0));
+        emu.execute(0xA300).unwrap();
+        assert_eq!(emu.index, 0x300);
+    }
+
+    // --- Random (CXNN) ---
+
+    #[test]
+    fn test_rand() {
+        let mut emu = emulator(FixedRng(0xFF));
+        // rng returns 0xFF, mask is 0x0F → result = 0xFF & 0x0F = 0x0F
+        emu.execute(0xC00F).unwrap();
+        assert_eq!(emu.reg[0], 0x0F);
+    }
+
+    // --- Key Skip Instructions (EX9E, EXA1) ---
+
+    #[test]
+    fn test_skip_if_pressed_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x5;
+        emu.keys[0x5] = true;
+        emu.execute(0xE09E).unwrap();
+        assert_eq!(emu.pc, initial_pc + OPCODE_SIZE as u16);
+    }
+
+    #[test]
+    fn test_skip_if_pressed_no_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x5;
+        emu.keys[0x5] = false;
+        emu.execute(0xE09E).unwrap();
+        assert_eq!(emu.pc, initial_pc);
+    }
+
+    #[test]
+    fn test_skip_if_not_pressed_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x5;
+        emu.keys[0x5] = false;
+        emu.execute(0xE0A1).unwrap();
+        assert_eq!(emu.pc, initial_pc + OPCODE_SIZE as u16);
+    }
+
+    #[test]
+    fn test_skip_if_not_pressed_no_match() {
+        let mut emu = emulator(FixedRng(0));
+        let initial_pc = emu.pc;
+        emu.reg[0] = 0x5;
+        emu.keys[0x5] = true;
+        emu.execute(0xE0A1).unwrap();
+        assert_eq!(emu.pc, initial_pc);
+    }
+
+    #[test]
+    fn test_skip_if_pressed_invalid_key() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x10; // key value > 0xF
+        assert!(matches!(emu.execute(0xE09E), Err(EmulatorError::InvalidKey { key: 0x10 })));
+    }
+
+    #[test]
+    fn test_skip_if_not_pressed_invalid_key() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0xFF;
+        assert!(matches!(emu.execute(0xE0A1), Err(EmulatorError::InvalidKey { key: 0xFF })));
+    }
+
+    // --- Timers (FX07, FX15, FX18) ---
+
+    #[test]
+    fn test_load_delay_timer() {
+        let mut emu = emulator(FixedRng(0));
+        emu.delay_timer = 0x42;
+        emu.execute(0xF007).unwrap();
+        assert_eq!(emu.reg[0], 0x42);
+    }
+
+    #[test]
+    fn test_set_delay_timer() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x30;
+        emu.execute(0xF015).unwrap();
+        assert_eq!(emu.delay_timer, 0x30);
+    }
+
+    #[test]
+    fn test_set_sound_timer() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x20;
+        emu.execute(0xF018).unwrap();
+        assert_eq!(emu.sound_timer, 0x20);
+    }
+
+    // --- Await Key Press (FX0A) ---
+
+    #[test]
+    fn test_await_key_press() {
+        let mut emu = emulator(FixedRng(0));
+        emu.execute(0xF30A).unwrap();
+        assert!(emu.waiting_input);
+        assert_eq!(emu.waiting_reg, 3);
+    }
+
+    // --- Add Index (FX1E) ---
+
+    #[test]
+    fn test_add_index() {
+        let mut emu = emulator(FixedRng(0));
+        emu.index = 0x100;
+        emu.reg[0] = 0x50;
+        emu.execute(0xF01E).unwrap();
+        assert_eq!(emu.index, 0x150);
+    }
+
+    // --- Set Index for Font (FX29) ---
+
+    #[test]
+    fn test_set_index_for_font() {
+        let mut emu = emulator(FixedRng(0));
+        emu.reg[0] = 0x0;
+        emu.execute(0xF029).unwrap();
+        assert_eq!(emu.index, FONT_OFFSET as u16);
+
+        emu.reg[0] = 0xF;
+        emu.execute(0xF029).unwrap();
+        assert_eq!(emu.index, (FONT_OFFSET + 15 * 5) as u16);
+    }
+
+    // --- Store BCD (FX33) ---
+
+    #[test]
+    fn test_store_bcd() {
+        let mut emu = emulator(FixedRng(0));
+        emu.index = 0x300;
+        emu.reg[0] = 254;
+        emu.execute(0xF033).unwrap();
+        assert_eq!(emu.mem[0x300], 2); // hundreds
+        assert_eq!(emu.mem[0x301], 5); // tens
+        assert_eq!(emu.mem[0x302], 4); // ones
+    }
+
+    #[test]
+    fn test_store_bcd_zero() {
+        let mut emu = emulator(FixedRng(0));
+        emu.index = 0x300;
+        emu.reg[0] = 0;
+        emu.execute(0xF033).unwrap();
+        assert_eq!(emu.mem[0x300], 0);
+        assert_eq!(emu.mem[0x301], 0);
+        assert_eq!(emu.mem[0x302], 0);
+    }
+
+    #[test]
+    fn test_store_bcd_oob() {
+        let mut emu = emulator(FixedRng(0));
+        // needs 3 bytes at index: I, I+1, I+2
+        // index 4094: I+2 = 4096 >= 4096 → OOB
+        emu.index = 4094;
+        assert!(matches!(emu.execute(0xF033), Err(EmulatorError::MemoryOutOfBounds { .. })));
+    }
+
+    // --- Dump/Load Registers (FX55, FX65) ---
+
+    #[test]
+    fn test_dump_registers() {
+        let mut emu = emulator(FixedRng(0));
+        emu.index = 0x300;
+        emu.reg[0] = 0xAA;
+        emu.reg[1] = 0xBB;
+        emu.reg[2] = 0xCC;
+        emu.reg[3] = 0xDD;
+        // dump V0-V3
+        emu.execute(0xF355).unwrap();
+        assert_eq!(emu.mem[0x300], 0xAA);
+        assert_eq!(emu.mem[0x301], 0xBB);
+        assert_eq!(emu.mem[0x302], 0xCC);
+        assert_eq!(emu.mem[0x303], 0xDD);
+    }
+
+    #[test]
+    fn test_load_registers() {
+        let mut emu = emulator(FixedRng(0));
+        emu.index = 0x300;
+        emu.mem[0x300] = 0x11;
+        emu.mem[0x301] = 0x22;
+        emu.mem[0x302] = 0x33;
+        // load V0-V2
+        emu.execute(0xF265).unwrap();
+        assert_eq!(emu.reg[0], 0x11);
+        assert_eq!(emu.reg[1], 0x22);
+        assert_eq!(emu.reg[2], 0x33);
+    }
+
+    #[test]
+    fn test_dump_load_round_trip() {
+        let mut emu = emulator(FixedRng(0));
+        emu.index = 0x300;
+        emu.reg[0] = 0xAA;
+        emu.reg[1] = 0xBB;
+        emu.reg[2] = 0xCC;
+
+        emu.execute(0xF255).unwrap(); // dump V0-V2
+
+        emu.reg[0] = 0;
+        emu.reg[1] = 0;
+        emu.reg[2] = 0;
+
+        emu.execute(0xF265).unwrap(); // load V0-V2
+
+        assert_eq!(emu.reg[0], 0xAA);
+        assert_eq!(emu.reg[1], 0xBB);
+        assert_eq!(emu.reg[2], 0xCC);
+    }
+
+    #[test]
+    fn test_dump_registers_oob() {
+        let mut emu = emulator(FixedRng(0));
+        emu.index = 4094;
+        // dump V0-V3: needs indices 4094..4097, but 4094+3 = 4097 >= 4096 → OOB
+        assert!(matches!(emu.execute(0xF355), Err(EmulatorError::MemoryOutOfBounds { .. })));
+    }
+
+    #[test]
+    fn test_load_registers_oob() {
+        let mut emu = emulator(FixedRng(0));
+        emu.index = 4094;
+        assert!(matches!(emu.execute(0xF365), Err(EmulatorError::MemoryOutOfBounds { .. })));
+    }
+
+    // --- Unknown Opcode ---
+
+    #[test]
+    fn test_unknown_opcode() {
+        let mut emu = emulator(FixedRng(0));
+        assert!(matches!(emu.execute(0x0000), Err(EmulatorError::UnknownOpcode(0x0000))));
+    }
+
+    #[test]
+    fn test_unknown_opcode_bad_suffix() {
+        let mut emu = emulator(FixedRng(0));
+        // 0x5XY0 is valid, but 0x5XY1 is not
+        assert!(matches!(emu.execute(0x5001), Err(EmulatorError::UnknownOpcode(0x5001))));
+    }
+}

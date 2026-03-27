@@ -4,11 +4,13 @@ pub trait RandomSource {
     fn next_u8(&mut self) -> u8;
 }
 
+#[derive(Debug)]
 pub struct TickOutput {
     pub screen_updated: bool,
     pub sound_active: bool,
 }
 
+#[derive(Debug)]
 pub enum EmulatorError {
     UnknownOpcode(u16),
     StackOverflow,
@@ -177,3 +179,239 @@ impl Emulator {
 mod font;
 mod consts;
 mod cpu;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::consts::PC_START;
+
+    struct FixedRng(u8);
+
+    impl RandomSource for FixedRng {
+        fn next_u8(&mut self) -> u8 { self.0 }
+    }
+
+    fn emu() -> Emulator {
+        Emulator::new(Box::new(FixedRng(0)))
+    }
+
+    // --- load_rom ---
+
+    #[test]
+    fn test_load_rom() {
+        let mut emu = emu();
+        let rom = [0x60, 0x42, 0x61, 0x10]; // two instructions
+        emu.load_rom(&rom).unwrap();
+
+        assert_eq!(emu.mem[PC_START], 0x60);
+        assert_eq!(emu.mem[PC_START + 1], 0x42);
+        assert_eq!(emu.mem[PC_START + 2], 0x61);
+        assert_eq!(emu.mem[PC_START + 3], 0x10);
+    }
+
+    #[test]
+    fn test_load_rom_resets_state() {
+        let mut emu = emu();
+        emu.reg[0] = 0xFF;
+        emu.sp = 5;
+        emu.delay_timer = 10;
+
+        emu.load_rom(&[0x00, 0xE0]).unwrap();
+
+        assert_eq!(emu.reg[0], 0);
+        assert_eq!(emu.sp, 0);
+        assert_eq!(emu.delay_timer, 0);
+        assert_eq!(emu.pc, PC_START as u16);
+    }
+
+    #[test]
+    fn test_load_rom_too_large() {
+        let mut emu = emu();
+        let rom = vec![0u8; 4096 - PC_START + 1]; // one byte too many
+        assert!(matches!(emu.load_rom(&rom), Err(EmulatorError::MemoryOutOfBounds { .. })));
+    }
+
+    #[test]
+    fn test_load_rom_max_size() {
+        let mut emu = emu();
+        let rom = vec![0u8; 4096 - PC_START]; // exactly fills available memory
+        emu.load_rom(&rom).unwrap();
+    }
+
+    // --- tick ---
+
+    #[test]
+    fn test_tick_executes_instruction() {
+        let mut emu = emu();
+        // load a ROM: V0 = 0x42 (0x6042)
+        emu.load_rom(&[0x60, 0x42]).unwrap();
+
+        // 2ms at 500 Hz = 1 cycle
+        emu.tick(2.0).unwrap();
+
+        assert_eq!(emu.reg[0], 0x42);
+        assert_eq!(emu.pc, PC_START as u16 + 2);
+    }
+
+    #[test]
+    fn test_tick_screen_updated() {
+        let mut emu = emu();
+        // load a clear screen instruction (00E0)
+        emu.load_rom(&[0x00, 0xE0]).unwrap();
+        let output = emu.tick(2.0).unwrap();
+        assert!(output.screen_updated);
+    }
+
+    #[test]
+    fn test_tick_sound_active() {
+        let mut emu = emu();
+        // load NOP-like instruction that won't error (V0 = 0)
+        emu.load_rom(&[0x60, 0x00]).unwrap();
+        emu.sound_timer = 5;
+
+        let output = emu.tick(2.0).unwrap();
+        assert!(output.sound_active);
+    }
+
+    #[test]
+    fn test_tick_waiting_for_input() {
+        let mut emu = emu();
+        emu.load_rom(&[0x60, 0x42]).unwrap();
+        emu.waiting_input = true;
+        emu.waiting_reg = 3;
+
+        // no keys pressed, tick should not execute instructions
+        emu.tick(2.0).unwrap();
+        assert_eq!(emu.reg[0], 0x00); // instruction was NOT executed
+        assert_eq!(emu.pc, PC_START as u16); // PC didn't advance
+    }
+
+    // --- update_timers ---
+
+    #[test]
+    fn test_timers_decrement_at_60hz() {
+        let mut emu = emu();
+        emu.delay_timer = 2;
+        emu.sound_timer = 2;
+
+        // 1/60th of a second in ms ≈ 16.667ms → one decrement
+        emu.update_timers(16.667);
+        assert_eq!(emu.delay_timer, 1);
+        assert_eq!(emu.sound_timer, 1);
+    }
+
+    #[test]
+    fn test_timers_stop_at_zero() {
+        let mut emu = emu();
+        emu.delay_timer = 0;
+        emu.sound_timer = 0;
+
+        emu.update_timers(16.667);
+        assert_eq!(emu.delay_timer, 0);
+        assert_eq!(emu.sound_timer, 0);
+    }
+
+    #[test]
+    fn test_timers_multiple_decrements() {
+        let mut emu = emu();
+        emu.delay_timer = 10;
+
+        // 5/60ths of a second → 5 decrements
+        emu.update_timers(5.0 * 1000.0 / 60.0);
+        assert_eq!(emu.delay_timer, 5);
+    }
+
+    // --- check_keys ---
+
+    #[test]
+    fn test_check_keys_stores_first_pressed() {
+        let mut emu = emu();
+        emu.waiting_input = true;
+        emu.waiting_reg = 5;
+        emu.keys[3] = true;
+        emu.keys[7] = true;
+
+        emu.check_keys();
+
+        assert_eq!(emu.reg[5], 3); // first pressed key (lowest index)
+        assert!(!emu.waiting_input);
+    }
+
+    #[test]
+    fn test_check_keys_no_key_pressed() {
+        let mut emu = emu();
+        emu.waiting_input = true;
+        emu.waiting_reg = 5;
+
+        emu.check_keys();
+
+        assert!(emu.waiting_input); // still waiting
+    }
+
+    // --- key_down / key_up ---
+
+    #[test]
+    fn test_key_down_and_up() {
+        let mut emu = emu();
+        emu.key_down(0x5);
+        assert!(emu.keys[0x5]);
+
+        emu.key_up(0x5);
+        assert!(!emu.keys[0x5]);
+    }
+
+    #[test]
+    fn test_key_down_ignores_invalid() {
+        let mut emu = emu();
+        emu.key_down(0x10); // > 0xF, should be ignored
+        assert_eq!(emu.keys, [false; 16]);
+    }
+
+    #[test]
+    fn test_key_up_ignores_invalid() {
+        let mut emu = emu();
+        emu.keys[0] = true;
+        emu.key_up(0x10); // > 0xF, should be ignored
+        assert!(emu.keys[0]); // unchanged
+    }
+
+    // --- reset ---
+
+    #[test]
+    fn test_reset() {
+        let mut emu = emu();
+        emu.reg[0] = 0xFF;
+        emu.sp = 5;
+        emu.index = 0x300;
+        emu.delay_timer = 10;
+        emu.sound_timer = 10;
+        emu.keys[5] = true;
+        emu.screen[100] = 1;
+        emu.pc = 0x400;
+
+        emu.reset();
+
+        assert_eq!(emu.reg, [0; 16]);
+        assert_eq!(emu.sp, 0);
+        assert_eq!(emu.index, 0);
+        assert_eq!(emu.delay_timer, 0);
+        assert_eq!(emu.sound_timer, 0);
+        assert_eq!(emu.keys, [false; 16]);
+        assert_eq!(emu.screen, [0; SCREEN_WIDTH * SCREEN_HEIGHT]);
+        assert_eq!(emu.pc, PC_START as u16);
+    }
+
+    // --- screen ---
+
+    #[test]
+    fn test_screen_returns_buffer() {
+        let mut emu = emu();
+        emu.screen[0] = 1;
+        emu.screen[100] = 1;
+
+        let screen = emu.screen();
+        assert_eq!(screen.len(), SCREEN_WIDTH * SCREEN_HEIGHT);
+        assert_eq!(screen[0], 1);
+        assert_eq!(screen[100], 1);
+    }
+}
