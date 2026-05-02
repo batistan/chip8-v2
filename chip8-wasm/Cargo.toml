@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 chip8-core = { path = "../chip8-core" }
-wasm-bindgen = "0.2"
+wasm-bindgen = "=0.2.100"
 console_error_panic_hook = "0.1"
+getrandom = { version = "0.4.2", features = ["wasm_js"] }
 

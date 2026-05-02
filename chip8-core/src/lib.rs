@@ -20,6 +20,21 @@ pub enum EmulatorError {
     InvalidKey { key: u8 },
 }
 
+impl std::fmt::Display for EmulatorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EmulatorError::UnknownOpcode(inst) => write!(f, "Unknown opcode: {:04X}", inst),
+            EmulatorError::StackOverflow => write!(f, "Stack overflow"),
+            EmulatorError::StackUnderflow => write!(f, "Stack underflow"),
+            EmulatorError::MemoryOutOfBounds { address } => write!(f, "Memory out of bounds: {:04X}", address),
+            EmulatorError::InvalidRegister { register } => write!(f, "Invalid register: {}", register),
+            EmulatorError::InvalidKey { key } => write!(f, "Invalid key: {}", key),
+        }
+    }
+}
+
+impl std::error::Error for EmulatorError {}
+
 pub struct Emulator {
     rng: Box<dyn RandomSource>,
     mem: [u8; 4096],
@@ -156,6 +171,9 @@ impl Emulator {
     pub fn screen(&self) -> &[u8] { // 64 * 32 = 2048 bytes
         &self.screen
     }
+
+    pub fn screen_width(&self) -> usize { SCREEN_WIDTH }
+    pub fn screen_height(&self) -> usize { SCREEN_HEIGHT }
 
     pub fn reset(&mut self) {
         self.mem[FONT_OFFSET..FONT_OFFSET + font::FONT.len()].copy_from_slice(&font::FONT);
