@@ -59,6 +59,11 @@ npm run lint
 npm run typecheck
 npm run build
 npm test -- --run
+
+# Dependency security audit
+cargo install cargo-audit  # or: cargo binstall cargo-audit
+cargo audit
+( cd www && npm audit )
 ```
 
 ## CI
@@ -71,3 +76,21 @@ Branches without an open PR don't trigger CI. The workflow at
   config change.
 - **www** — runs when files under `www/`, `chip8-core/`, or `chip8-wasm/`
   change (the wasm crates are inputs to the www build).
+
+## Weekly security audit
+
+`.github/workflows/security-audit.yml` runs every Monday at 09:17 UTC (and on
+manual `workflow_dispatch`). It scans both stacks for known vulnerabilities and
+reports findings — it never modifies the repo.
+
+- **cargo-audit** checks `Cargo.lock` against the [RustSec Advisory Database].
+- **npm-audit** checks `www/package-lock.json` against the npm advisory feed.
+
+Each job passes silently when nothing is found and fails with the advisory
+text plus mitigation guidance (patched version, `cargo update -p ...` or
+`npm audit fix` invocation, etc.) on the run summary when something is.
+
+If GitHub disables the schedule after 60 days of repo inactivity (default
+behavior for scheduled workflows), re-enable it manually from the Actions tab.
+
+[RustSec Advisory Database]: https://rustsec.org/advisories/
