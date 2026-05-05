@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      www: ${{ steps.filter.outputs.www }}
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            www:
+              - 'www/**'
+              - 'chip8-wasm/**'
+              - 'chip8-core/**'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/**'
+              - '.github/workflows/ci.yml'
+            rust:
+              - 'chip8-core/**'
+              - 'chip8-wasm/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/**'
+              - '.github/workflows/ci.yml'
+
+  rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy (workspace, host target)
+        run: cargo clippy --workspace --all-targets --exclude chip8-wasm -- -D warnings
+      - name: cargo clippy (chip8-wasm, wasm32 target)
+        run: cargo clippy -p chip8-wasm --target wasm32-unknown-unknown -- -D warnings
+      - name: cargo build
+        run: cargo build --workspace --exclude chip8-wasm
+      - name: cargo test
+        run: cargo test --workspace --exclude chip8-wasm
+
+  www:
+    needs: changes
+    if: needs.changes.outputs.www == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: cargo-bins/cargo-binstall@main
+      - name: install wasm-pack
+        run: cargo binstall -y wasm-pack
+      - name: build wasm package
+        run: wasm-pack build chip8-wasm --target bundler
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: www/package-lock.json
+      - name: npm ci
+        run: npm ci
+        working-directory: www
+      - name: lint
+        run: npm run lint
+        working-directory: www
+      - name: build
+        run: npm run build
+        working-directory: www
+      - name: test
+        run: npm test -- --run
+        working-directory: www
