@@ -1,0 +1,105 @@
+name: Security audit
+
+on:
+  schedule:
+    # Mondays 09:17 UTC. Off-the-hour to dodge GH Actions cron load spikes.
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Install cargo-audit
+        run: cargo binstall -y cargo-audit
+      - name: Run cargo audit
+        run: |
+          {
+            echo "## cargo audit"
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          cargo audit --color never 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$STATUS" -ne 0 ]; then
+            cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+
+          **Vulnerabilities found in the Rust dependency tree.** Each entry above includes:
+          - the RustSec advisory ID (`RUSTSEC-yyyy-####`),
+          - the affected crate and version,
+          - a short description of the vulnerability, and
+          - the recommended patched version.
+
+          Full advisory text and references: <https://rustsec.org/advisories/>.
+
+          Mitigation strategies (in order of preference):
+          1. Bump the dep to the patched version. For a direct dep, edit `chip8-core/Cargo.toml` or `chip8-wasm/Cargo.toml`. For a transitive dep, run `cargo update -p <crate> --precise <version>` and commit the `Cargo.lock` change.
+          2. If the crate is unmaintained (`RUSTSEC-yyyy-####` informational), evaluate whether to replace it.
+          3. If no fix is yet available, audit whether the vulnerable code path is actually reachable from this codebase before deciding to ship-with-known-issue. Document the rationale and re-evaluate next audit run.
+
+          This workflow only reports — it does not modify the repo.
+          EOF
+            exit "$STATUS"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "_No known vulnerabilities in the Rust dependency tree._" >> "$GITHUB_STEP_SUMMARY"
+
+  npm-audit:
+    name: npm audit (www)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify lockfile present
+        working-directory: www
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::error::www/package-lock.json missing — commit the lockfile so security audits are reproducible."
+            exit 1
+          fi
+      - name: Run npm audit
+        working-directory: www
+        run: |
+          {
+            echo "## npm audit (www)"
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          npm audit 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$STATUS" -ne 0 ]; then
+            cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+
+          **Vulnerabilities found in the npm dependency tree.** Each entry above includes:
+          - severity (low / moderate / high / critical),
+          - the affected package and the vulnerable version range,
+          - the GHSA advisory URL, and
+          - the patched version (when one exists).
+
+          Mitigation strategies (in order of preference):
+          1. Run `npm audit fix` locally for non-breaking patch bumps and commit the resulting `package-lock.json` change.
+          2. Run `npm audit fix --force` only if the fix requires a major version bump; review the changelog for breaking changes before committing.
+          3. If the vulnerability is in a dev-only dep (e.g., a build/test tool), the supply-chain risk is lower than a runtime dep — still patch when feasible.
+          4. If no fix is available, evaluate whether the vulnerable code path is reachable from this codebase. Document and re-evaluate next audit run.
+
+          This workflow only reports — it does not modify the repo.
+          EOF
+            exit "$STATUS"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "_No known vulnerabilities in the npm dependency tree._" >> "$GITHUB_STEP_SUMMARY"
