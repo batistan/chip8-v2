@@ -14,7 +14,7 @@ export function App() {
         <aside>
           <InternalsPanel />
         </aside>
-        <div class="center">
+        <div class="canvas-col">
           <Emulator />
           <ErrorPane />
           <RomSelector />
@@ -29,10 +29,14 @@ export function App() {
 
 function ErrorPane() {
   return (
-    <For each={getErrors()}>
-      {(error) => (
-        <button onClick={() => dismissError(error.id)}>{error.message}</button>
-      )}
-    </For>
+    <div class="error-list">
+      <For each={getErrors()}>
+        {(error) => (
+          <button class="error-item" onClick={() => dismissError(error.id)}>
+            {error.message}
+          </button>
+        )}
+      </For>
+    </div>
   );
 }

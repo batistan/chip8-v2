@@ -11,7 +11,7 @@ export function KeyMap() {
   });
 
   return (
-    <div class="keys">
+    <div class="keymap-grid">
       <For each={Object.entries(keyLabels())}>
         {([code, label]) => {
           const c8Val = defaultKeyMap[code]
@@ -35,11 +35,9 @@ interface KeyProps {
 
 function Key(props: KeyProps) {
   return (
-    <div class={"key" + (props.isSelected ? " selected" : "")}>
-      <div>
-        <p class="secondary">{props.secondary}</p>
-        <p class="primary">{props.primary.toLocaleUpperCase()}</p>
-      </div>
+    <div class={"keycap" + (props.isSelected ? " pressed" : "")}>
+      <span class="chip">{props.secondary}</span>
+      <span class="phys">{props.primary.toLocaleUpperCase()}</span>
     </div>
   );
 }

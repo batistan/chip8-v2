@@ -102,13 +102,15 @@ export default function Emulator() {
   });
 
   return (
-    <div ref={canvasHolderRef} class="emulator-container">
-      <canvas
-        ref={canvasRef}
-        id="emulator-canvas"
-        width={chip8.screen_width() * scale()}
-        height={chip8.screen_height() * scale()}
-      />
+    <div ref={canvasHolderRef} class="canvas-col">
+      <div class="canvas-frame">
+        <canvas
+          ref={canvasRef}
+          class="canvas-screen"
+          width={chip8.screen_width() * scale()}
+          height={chip8.screen_height() * scale()}
+        />
+      </div>
       <StatusBar />
     </div>
   );
@@ -117,6 +119,11 @@ export default function Emulator() {
 // TODO localization
 function StatusBar() {
   return (
-    <div class="status">{emulationState()}</div>
+    <div class="canvas-status">
+      <div class="left">
+        <span class="status-dot">{emulationState()}</span>
+      </div>
+      <div class="right"></div>
+    </div>
   );
 }
