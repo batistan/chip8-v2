@@ -1,0 +1,58 @@
+#!/bin/sh
+# chip8-v2 pre-commit hook.
+#
+# Runs the same lint/typecheck/build gates as CI, scoped to whichever stack
+# the staged files touch. Tests are intentionally skipped (CI covers them).
+#
+# Enable with:  git config core.hooksPath .githooks
+
+set -e
+
+CHANGED=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$CHANGED" ] && exit 0
+
+WWW=0
+RUST=0
+WASM_SRC=0
+
+for f in $CHANGED; do
+  case "$f" in
+    www/*)
+      WWW=1
+      ;;
+    chip8-wasm/*|chip8-core/*)
+      RUST=1
+      WASM_SRC=1
+      ;;
+    Cargo.toml|Cargo.lock|rust-toolchain.toml|.cargo/*)
+      RUST=1
+      ;;
+    *)
+      ;;
+  esac
+done
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+if [ "$RUST" = 1 ]; then
+  echo "pre-commit: running Rust checks..."
+  cargo fmt --all -- --check
+  cargo clippy --workspace --all-targets --exclude chip8-wasm -- -D warnings
+  cargo clippy -p chip8-wasm --target wasm32-unknown-unknown -- -D warnings
+  cargo build --workspace --exclude chip8-wasm
+fi
+
+if [ "$WWW" = 1 ]; then
+  echo "pre-commit: running www checks..."
+  if [ ! -d chip8-wasm/pkg ]; then
+    echo "pre-commit: chip8-wasm/pkg missing — run 'just build-wasm' first." >&2
+    exit 1
+  fi
+  if [ "$WASM_SRC" = 1 ]; then
+    echo "pre-commit: warning — chip8-wasm/ or chip8-core/ changed; chip8-wasm/pkg may be stale." >&2
+  fi
+  ( cd www && npm run lint && npm run typecheck )
+fi
+
+exit 0
