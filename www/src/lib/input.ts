@@ -1,4 +1,5 @@
 import type { Chip8 } from "chip8-wasm";
+import { setPressedKeys } from "../state";
 
 export const defaultKeyMap: Record<string, number> = {
   Digit1: 0x1,
@@ -19,6 +20,25 @@ export const defaultKeyMap: Record<string, number> = {
   KeyV: 0xf,
 };
 
+export const defaultKeyLabels: Record<string, string> = {
+  Digit1: "1",
+  Digit2: "2",
+  Digit3: "3",
+  Digit4: "4",
+  KeyQ: "Q",
+  KeyW: "W",
+  KeyE: "E",
+  KeyR: "R",
+  KeyA: "A",
+  KeyS: "S",
+  KeyD: "D",
+  KeyF: "F",
+  KeyZ: "Z",
+  KeyX: "X",
+  KeyC: "C",
+  KeyV: "V",
+}
+
 type KeyboardEventType = "keydown" | "keyup";
 
 function handleKeyPress(
@@ -36,8 +56,14 @@ function handleKeyPress(
   event.preventDefault();
 
   if (action === "keydown") {
+    setPressedKeys(prev => new Set(prev).add(key));
     chip8.key_down(key);
   } else {
+    setPressedKeys(prev => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
     chip8.key_up(key);
   }
 }

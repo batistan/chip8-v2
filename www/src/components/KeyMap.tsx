@@ -1,3 +1,61 @@
+import { For, createSignal, onMount, type Setter } from "solid-js";
+import { defaultKeyLabels, defaultKeyMap } from "../lib/input";
+import { pressedKeys } from "../state";
+
 export function KeyMap() {
-  return <div>Key mappings</div>
+  const [keyLabels, setKeyLabels] =
+    createSignal<Record<string, string>>(defaultKeyLabels);
+
+  onMount(async () => {
+    await tryUpdateKeyMap(setKeyLabels);
+  });
+
+  return (
+    <div class="keys">
+      <For each={Object.entries(keyLabels())}>
+        {([code, label]) => {
+          const c8Val = defaultKeyMap[code]
+          console.log(label, code, c8Val);
+          return <Key
+            primary={label}
+            secondary={`0x${c8Val.toString(16).toLocaleUpperCase()}`}
+            isSelected={pressedKeys().has(c8Val)}
+          />
+        }}
+      </For>
+    </div>
+  );
+}
+
+interface KeyProps {
+  primary: string;
+  secondary: string | number;
+  isSelected: boolean;
+}
+
+function Key(props: KeyProps) {
+  return (
+    <div class={"key" + (props.isSelected ? " selected" : "")}>
+      <div>
+        <p class="secondary">{props.secondary}</p>
+        <p class="primary">{props.primary.toLocaleUpperCase()}</p>
+      </div>
+    </div>
+  );
+}
+
+async function tryUpdateKeyMap(
+  handleSetKeyMap: Setter<Record<string, string>>,
+) {
+  if (!('keyboard' in navigator)) return;
+
+  const layoutMap = await navigator.keyboard?.getLayoutMap()
+  
+  if (!layoutMap) return;
+
+  for (const [keyCode, physical] of layoutMap) {
+    if (keyCode in defaultKeyMap) {
+      handleSetKeyMap((prev) => ({ ...prev, [keyCode]: physical }));
+    }
+  }
 }

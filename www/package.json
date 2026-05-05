@@ -10,6 +10,7 @@
     "test": "vitest"
   },
   "devDependencies": {
+    "@types/dom-navigation": "^1.0.7",
     "jsdom": "^29.1.0",
     "typescript": "~5.9.3",
     "vite": "^8.0.1",

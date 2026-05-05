@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
+    "target": "es6",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": ["es6", "es2023", "DOM", "DOM.Iterable"],
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "types": ["vite/client"],

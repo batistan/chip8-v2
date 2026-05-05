@@ -1,5 +1,5 @@
 export function Header() {
-  return <header>
-    CHIP-8 Emulator
+  return <header class="header">
+    <h1>CHIP-8 Emulator</h1>
   </header>
 }

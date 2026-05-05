@@ -1,3 +1,3 @@
 export function InternalsPanel() {
-  return <aside>Disassembled instructions, emulator state</aside>
+  return <div>Disassembled instructions, emulator state</div>
 }
