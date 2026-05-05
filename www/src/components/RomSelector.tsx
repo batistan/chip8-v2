@@ -31,8 +31,14 @@ export function RomSelector() {
 
   return (
     <div class="roms">
-      <label class="upload-btn">
-        Upload ROM
+      <label class="upload">
+        <div class="upload-left">
+          <div class="upload-text">
+            <div class="title">Upload ROM</div>
+            <div class="sub">Drop or pick a .ch8 / .c8 file</div>
+          </div>
+        </div>
+        <span class="upload-cta">Browse</span>
         <input
           id="uploadedRom"
           type="file"
@@ -58,10 +64,13 @@ interface RomCardProps {
 
 function RomCard(props: RomCardProps) {
   return (
-    <div class={"rom" + (props.isSelected ? " selected" : "")} onClick={() => props.handleLoad(props.rom)}>
-      <h6 class="panel-header">{props.rom.title}</h6>
+    <div
+      class={"rom-item" + (props.isSelected ? " active" : "")}
+      onClick={() => props.handleLoad(props.rom)}
+    >
+      <div class="rom-title">{props.rom.title}</div>
       <Show when={props.rom.description !== undefined}>
-        <p>{props.rom.description}</p>
+        <p class="rom-desc">{props.rom.description}</p>
       </Show>
     </div>
   );
