@@ -30,29 +30,51 @@ export function RomSelector() {
   }
 
   return (
-    <div class="roms">
-      <label class="upload">
-        <div class="upload-left">
-          <div class="upload-text">
-            <div class="title">Upload ROM</div>
-            <div class="sub">Drop or pick a .ch8 / .c8 file</div>
+    <section class="window">
+      <div class="window-titlebar">
+        <span class="window-title">ROMs.LIB — Cartridge Library</span>
+        <div class="window-controls">
+          <button type="button" class="window-control" aria-label="Minimize">_</button>
+          <button type="button" class="window-control" aria-label="Maximize">▢</button>
+          <button type="button" class="window-control" aria-label="Close">×</button>
+        </div>
+      </div>
+      <div class="window-body roms-body">
+        <label class="upload">
+          <div class="upload-left">
+            <div class="upload-icon" aria-hidden="true">⌬</div>
+            <div class="upload-text">
+              <div class="title">Insert cartridge</div>
+              <div class="sub">Drop or pick a .ch8 / .c8 file</div>
+            </div>
+          </div>
+          <span class="upload-cta">Browse…</span>
+          <input
+            id="uploadedRom"
+            type="file"
+            accept=".ch8,.c8"
+            multiple={false}
+            onChange={({ target }) => handleUpload(target.files?.[0])}
+          />
+        </label>
+        <div>
+          <div class="rom-listing-label">Installed cartridges</div>
+          <div class="rom-listing">
+            <div class="rom-grid">
+              <For each={PRESET_ROMS}>
+                {(rom) => (
+                  <RomCard
+                    rom={rom}
+                    handleLoad={handleLoad}
+                    isSelected={currentRom()?.name === rom.title}
+                  />
+                )}
+              </For>
+            </div>
           </div>
         </div>
-        <span class="upload-cta">Browse</span>
-        <input
-          id="uploadedRom"
-          type="file"
-          accept=".ch8,.c8"
-          multiple={false}
-          onChange={({ target }) => handleUpload(target.files?.[0])}
-        />
-      </label>
-      <div class="rom-grid">
-        <For each={PRESET_ROMS}>
-          {(rom) => <RomCard rom={rom} handleLoad={handleLoad} isSelected={currentRom()?.name === rom.title} />}
-        </For>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -68,9 +90,9 @@ function RomCard(props: RomCardProps) {
       class={"rom-item" + (props.isSelected ? " active" : "")}
       onClick={() => props.handleLoad(props.rom)}
     >
-      <div class="rom-title">{props.rom.title}</div>
+      <span class="rom-title">{props.rom.title}</span>
       <Show when={props.rom.description !== undefined}>
-        <p class="rom-desc">{props.rom.description}</p>
+        <p class="rom-desc">— {props.rom.description}</p>
       </Show>
     </div>
   );
