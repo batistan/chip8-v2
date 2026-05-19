@@ -124,7 +124,7 @@ function StatusBar() {
       <div class="left">
         <span class={`status-dot ${emulationState()}`}>{emulationState()}</span>
       </div>
-      <div class="right"></div>
+      <div class="right" />
     </div>
   );
 }

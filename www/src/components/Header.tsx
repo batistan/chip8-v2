@@ -6,7 +6,7 @@ export function Header() {
           <span class="brand-mark">C8</span>
           <span class="brand-name">CHIP-8 Emulator</span>
         </div>
-        <div class="header-actions"></div>
+        <div class="header-actions" />
       </div>
     </header>
   );
