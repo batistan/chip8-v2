@@ -45,4 +45,3 @@ export const [scale, setScale] = createSignal<number>(10);
 export const [pressedKeys, setPressedKeys] = createSignal<ReadonlySet<number>>(
   new Set(),
 );
-
