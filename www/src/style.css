@@ -13,6 +13,7 @@
   --text-faint: #9d998a;
   --accent: #2b6f4f;
   --accent-soft: #d6ebe0;
+  --warning: #b58d38;
   --danger: #b54838;
   --canvas-bg: #1d1c17;
   --canvas-fg: #6dd49a;
@@ -236,7 +237,7 @@ button {
 .main {
   max-width: 1320px;
   margin: 0 auto;
-  padding: var(--s-7);
+  padding: var(--s-8) 0;
   display: grid;
   grid-template-columns: 320px 1fr 360px;
   gap: var(--s-7);
@@ -372,6 +373,21 @@ button {
   background: var(--accent);
   box-shadow: 0 0 var(--s-3) var(--accent);
 }
+
+.status-dot.stopped::before {
+  background: var(--danger);
+  box-shadow: 0 0 var(--s-3) var(--danger);
+}
+.status-dot.error::before {
+  background: var(--danger);
+  box-shadow: 0 0 var(--s-3) var(--danger);
+}
+.status-dot.paused::before {
+  background: var(--warning);
+  box-shadow: 0 0 var(--s-3) var(--warning);
+}
+
+
 
 /* ------- Upload ------- */
 .upload {

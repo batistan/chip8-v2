@@ -15,7 +15,6 @@ export function KeyMap() {
       <For each={Object.entries(keyLabels())}>
         {([code, label]) => {
           const c8Val = defaultKeyMap[code]
-          console.log(label, code, c8Val);
           return <Key
             primary={label}
             secondary={`0x${c8Val.toString(16).toLocaleUpperCase()}`}
@@ -45,7 +44,7 @@ function Key(props: KeyProps) {
 async function tryUpdateKeyMap(
   handleSetKeyMap: Setter<Record<string, string>>,
 ) {
-  if (!('keyboard' in navigator)) return;
+  if (!navigator.keyboard) return;
 
   const layoutMap = await navigator.keyboard?.getLayoutMap()
   

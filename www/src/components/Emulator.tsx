@@ -110,18 +110,19 @@ export default function Emulator() {
           width={chip8.screen_width() * scale()}
           height={chip8.screen_height() * scale()}
         />
-      </div>
       <StatusBar />
+      </div>
     </div>
   );
 }
 
 // TODO localization
+// emulation state e.g. stopped should map to Stopped in the display, or some other string in other locales
 function StatusBar() {
   return (
     <div class="canvas-status">
       <div class="left">
-        <span class="status-dot">{emulationState()}</span>
+        <span class={`status-dot ${emulationState()}`}>{emulationState()}</span>
       </div>
       <div class="right"></div>
     </div>

@@ -16,7 +16,7 @@ function randomId(): string {
 }
 
 export function addError(message: string): void {
-  setErrors(p => [...p, { id: randomId(), message }]);
+  setErrors((p) => [...p, { id: randomId(), message }]);
 }
 
 export function getErrors(): readonly AppError[] {
@@ -24,7 +24,7 @@ export function getErrors(): readonly AppError[] {
 }
 
 export function dismissError(id: string): void {
-  setErrors(prev => prev.filter(e => e.id !== id))
+  setErrors((prev) => prev.filter((e) => e.id !== id));
 }
 
 export function clearErrors(): void {
@@ -32,13 +32,17 @@ export function clearErrors(): void {
 }
 
 export type EmulationState = "stopped" | "running" | "paused" | "error";
-export const [emulationState, setEmulationState] = createSignal<EmulationState>("stopped");
+export const [emulationState, setEmulationState] =
+  createSignal<EmulationState>("stopped");
 
-export type CurrentRom = { name: string, bytes: Uint8Array } | null;
+export type CurrentRom = { name: string; bytes: Uint8Array } | null;
 export const [currentRom, setCurrentRom] = createSignal<CurrentRom>(null);
 
 export const [fps, setFps] = createSignal<number>(0);
 
 export const [scale, setScale] = createSignal<number>(10);
 
-export const [pressedKeys, setPressedKeys] = createSignal<ReadonlySet<number>>(new Set());
+export const [pressedKeys, setPressedKeys] = createSignal<ReadonlySet<number>>(
+  new Set(),
+);
+

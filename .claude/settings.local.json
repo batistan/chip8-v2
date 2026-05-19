@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(cargo test:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(npm test *)",
+      "Bash(claude --version)",
+      "Bash(grep -nE '^.{1,500}$' \"/Users/sorou/.claude/uploads/63e00f8f-3c2d-47ab-aad7-9f2f92832d71/019dd421-CHIP8_Emulator_standalone.html\")",
+      "Bash(python3 -c \"import sys, json; print\\(json.loads\\(sys.stdin.read\\(\\)\\)\\)\")",
+      "Read(//tmp/**)"
     ]
   }
 }
