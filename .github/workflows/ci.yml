@@ -75,8 +75,6 @@ jobs:
       - name: install wasm-pack
         run: cargo binstall -y wasm-pack
       - name: build wasm package
-        env:
-          PATH: "$PATH:$HOME/.cargo/bin"
         run: wasm-pack build chip8-wasm --target bundler
       - uses: actions/setup-node@v4
         with:
