@@ -1,5 +1,5 @@
-use wasm_bindgen::prelude::*;
 use chip8_core::{Emulator, EmulatorError, RandomSource, TickOutput};
+use wasm_bindgen::prelude::{JsError, wasm_bindgen};
 
 // uses a buffer to avoid needing to allocate a new array and call getrandom::fill every time
 // TODO see if we can make buffer size dynamic
@@ -12,7 +12,10 @@ struct WasmRng {
 
 impl WasmRng {
     fn new() -> Self {
-        WasmRng { buffer: [0; 32], idx: 0 }
+        WasmRng {
+            buffer: [0; 32],
+            idx: 0,
+        }
     }
 }
 
@@ -85,16 +88,18 @@ impl Chip8 {
     pub fn reset(&mut self) {
         self.emulator.reset();
     }
-
 }
 
 fn to_packed_num(value: TickOutput) -> u32 {
-    0u32
-        | (value.screen_updated as u32)
-        | ((value.sound_active as u32) << 1)
+    (value.screen_updated as u32) | ((value.sound_active as u32) << 1)
 }
 
 fn to_js_error(e: EmulatorError) -> JsError {
     JsError::new(&e.to_string())
 }
 
+impl Default for Chip8 {
+    fn default() -> Self {
+        Self::new()
+    }
+}

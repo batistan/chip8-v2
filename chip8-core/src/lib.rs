@@ -26,8 +26,12 @@ impl std::fmt::Display for EmulatorError {
             EmulatorError::UnknownOpcode(inst) => write!(f, "Unknown opcode: {:04X}", inst),
             EmulatorError::StackOverflow => write!(f, "Stack overflow"),
             EmulatorError::StackUnderflow => write!(f, "Stack underflow"),
-            EmulatorError::MemoryOutOfBounds { address } => write!(f, "Memory out of bounds: {:04X}", address),
-            EmulatorError::InvalidRegister { register } => write!(f, "Invalid register: {}", register),
+            EmulatorError::MemoryOutOfBounds { address } => {
+                write!(f, "Memory out of bounds: {:04X}", address)
+            }
+            EmulatorError::InvalidRegister { register } => {
+                write!(f, "Invalid register: {}", register)
+            }
             EmulatorError::InvalidKey { key } => write!(f, "Invalid key: {}", key),
         }
     }
@@ -49,7 +53,7 @@ pub struct Emulator {
     reg: [u8; 16], // V0-VF general purpose registers
     index: u16,
     pc: u16, // program counter
-    sp: u8, // stack pointer
+    sp: u8,  // stack pointer
     delay_timer: u8,
     sound_timer: u8,
     timer_accum: f64,
@@ -85,7 +89,9 @@ impl Emulator {
 
     pub fn load_rom(&mut self, data: &[u8]) -> Result<(), EmulatorError> {
         if data.len() > self.mem.len() - PC_START {
-            return Err(EmulatorError::MemoryOutOfBounds { address: (PC_START + data.len()) as u16 });
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: (PC_START + data.len()) as u16,
+            });
         }
 
         self.reset();
@@ -108,11 +114,12 @@ impl Emulator {
                 self.check_keys();
             } else {
                 self.execute(self.next_instruction()?)?;
-                if self.draw { should_update_screen = true; }
+                if self.draw {
+                    should_update_screen = true;
+                }
 
                 self.pc += 2;
             }
-
         }
 
         self.update_timers(delta_ms);
@@ -132,7 +139,7 @@ impl Emulator {
         let inst_msb = self.mem[self.pc as usize] as u16;
         let inst_lsb = self.mem[(self.pc + 1) as usize] as u16;
 
-        Ok(inst_msb << 8 | inst_lsb)
+        Ok((inst_msb << 8) | inst_lsb)
     }
 
     fn check_keys(&mut self) {
@@ -149,31 +156,44 @@ impl Emulator {
     fn update_timers(&mut self, delta_ms: f64) {
         self.timer_accum += delta_ms / 1000.0;
         while self.timer_accum >= 1.0 / 60.0 {
-            if self.delay_timer > 0 { self.delay_timer -= 1; };
-            if self.sound_timer > 0 { self.sound_timer -= 1; };
+            if self.delay_timer > 0 {
+                self.delay_timer -= 1;
+            };
+            if self.sound_timer > 0 {
+                self.sound_timer -= 1;
+            };
 
             self.timer_accum -= 1.0 / 60.0;
         }
     }
 
     pub fn key_down(&mut self, key: u8) {
-        if key > 0xF { return; }
+        if key > 0xF {
+            return;
+        }
 
         self.keys[key as usize] = true;
     }
 
     pub fn key_up(&mut self, key: u8) {
-        if key > 0xF { return; }
+        if key > 0xF {
+            return;
+        }
 
         self.keys[key as usize] = false;
     }
 
-    pub fn screen(&self) -> &[u8] { // 64 * 32 = 2048 bytes
+    pub fn screen(&self) -> &[u8] {
+        // 64 * 32 = 2048 bytes
         &self.screen
     }
 
-    pub fn screen_width(&self) -> usize { SCREEN_WIDTH }
-    pub fn screen_height(&self) -> usize { SCREEN_HEIGHT }
+    pub fn screen_width(&self) -> usize {
+        SCREEN_WIDTH
+    }
+    pub fn screen_height(&self) -> usize {
+        SCREEN_HEIGHT
+    }
 
     pub fn reset(&mut self) {
         self.mem[FONT_OFFSET..FONT_OFFSET + font::FONT.len()].copy_from_slice(&font::FONT);
@@ -194,9 +214,9 @@ impl Emulator {
     }
 }
 
-mod font;
 mod consts;
 mod cpu;
+mod font;
 
 #[cfg(test)]
 mod tests {
@@ -206,7 +226,9 @@ mod tests {
     struct FixedRng(u8);
 
     impl RandomSource for FixedRng {
-        fn next_u8(&mut self) -> u8 { self.0 }
+        fn next_u8(&mut self) -> u8 {
+            self.0
+        }
     }
 
     fn emu() -> Emulator {
@@ -246,7 +268,10 @@ mod tests {
     fn test_load_rom_too_large() {
         let mut emu = emu();
         let rom = vec![0u8; 4096 - PC_START + 1]; // one byte too many
-        assert!(matches!(emu.load_rom(&rom), Err(EmulatorError::MemoryOutOfBounds { .. })));
+        assert!(matches!(
+            emu.load_rom(&rom),
+            Err(EmulatorError::MemoryOutOfBounds { .. })
+        ));
     }
 
     #[test]

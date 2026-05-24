@@ -1,5 +1,5 @@
-use crate::{Emulator, EmulatorError};
 use crate::consts::{ADDR_MASK, FONT_OFFSET, IMM_MASK, OPCODE_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::{Emulator, EmulatorError};
 
 impl Emulator {
     pub(crate) fn execute(&mut self, inst: u16) -> Result<(), EmulatorError> {
@@ -7,11 +7,12 @@ impl Emulator {
             (inst & 0xF000) >> 12,
             (inst & 0x0F00) >> 8,
             (inst & 0x00F0) >> 4,
-            inst & 0x000F
+            inst & 0x000F,
         );
 
         match nibs {
-            (0x0, 0x0, 0xE, 0x0) => { // clear screen
+            (0x0, 0x0, 0xE, 0x0) => {
+                // clear screen
                 self.screen = [0u8; SCREEN_WIDTH * SCREEN_HEIGHT];
                 self.draw = true;
                 Ok(())
@@ -74,7 +75,9 @@ impl Emulator {
         // but worth calling out here in case we missed something
         let target_addr = addr - OPCODE_SIZE;
         if target_addr > self.mem.len() - 1 - OPCODE_SIZE {
-            return Err(EmulatorError::MemoryOutOfBounds { address: target_addr as u16 });
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: target_addr as u16,
+            });
         }
 
         self.pc = target_addr as u16;
@@ -89,7 +92,9 @@ impl Emulator {
         // see the above note on underflows
         let target_addr = addr - OPCODE_SIZE;
         if target_addr > self.mem.len() - OPCODE_SIZE {
-            return Err(EmulatorError::MemoryOutOfBounds { address: target_addr as u16 });
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: target_addr as u16,
+            });
         }
 
         self.stack[self.sp as usize] = self.pc;
@@ -215,7 +220,11 @@ impl Emulator {
     fn shift_left_reg(&mut self, reg1: u8, reg2: u8) -> Result<(), EmulatorError> {
         self.validate_registers(reg1, reg2)?;
 
-        self.reg[0xF] = if self.reg[reg1 as usize] & 0x80 == 0x80 { 1 } else { 0 };
+        self.reg[0xF] = if self.reg[reg1 as usize] & 0x80 == 0x80 {
+            1
+        } else {
+            0
+        };
         self.reg[reg1 as usize] <<= 1;
 
         Ok(())
@@ -252,7 +261,9 @@ impl Emulator {
         let target_addr = ((imm - OPCODE_SIZE as u16) + (self.reg[0] as u16)) as usize;
 
         if target_addr > self.mem.len() - 1 - OPCODE_SIZE {
-            return Err(EmulatorError::MemoryOutOfBounds { address: target_addr as u16 });
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: target_addr as u16,
+            });
         }
 
         self.pc = target_addr as u16;
@@ -276,7 +287,9 @@ impl Emulator {
         self.reg[0xF] = 0;
         for row in 0..height as usize {
             if start_addr + row > self.mem.len() - 1 {
-                return Err(EmulatorError::MemoryOutOfBounds { address: (start_addr + row) as u16 });
+                return Err(EmulatorError::MemoryOutOfBounds {
+                    address: (start_addr + row) as u16,
+                });
             }
 
             let byte = self.mem[start_addr + row];
@@ -287,7 +300,9 @@ impl Emulator {
             for col in 0..8u8 {
                 let bit = (byte >> (7 - col)) & 0x1; // & 0x1 will set LSB and 0 all other bits
                 // we only need to care about this bit if it's 1
-                if bit == 0 { continue; }
+                if bit == 0 {
+                    continue;
+                }
 
                 // modulo to allow screen wrapping,
                 // expected behavior by many ROMs
@@ -394,7 +409,9 @@ impl Emulator {
     fn store_bcd(&mut self, reg: u8) -> Result<(), EmulatorError> {
         self.validate_register(reg)?;
         if self.index as usize + 2 >= self.mem.len() {
-            return Err(EmulatorError::MemoryOutOfBounds { address: self.index + 2 });
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: self.index + 2,
+            });
         }
 
         let bcd = self.reg[reg as usize];
@@ -409,7 +426,9 @@ impl Emulator {
         self.validate_register(reg)?;
 
         if self.index as usize + reg as usize >= self.mem.len() {
-            return Err(EmulatorError::MemoryOutOfBounds { address: self.index + reg as u16 });
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: self.index + reg as u16,
+            });
         }
 
         for i in 0..=reg as usize {
@@ -423,7 +442,9 @@ impl Emulator {
         self.validate_register(reg)?;
 
         if self.index as usize + reg as usize >= self.mem.len() {
-            return Err(EmulatorError::MemoryOutOfBounds { address: self.index + reg as u16 });
+            return Err(EmulatorError::MemoryOutOfBounds {
+                address: self.index + reg as u16,
+            });
         }
 
         for i in 0..=reg as usize {
@@ -448,13 +469,15 @@ impl Emulator {
 
 #[cfg(test)]
 mod tests {
-    use crate::RandomSource;
     use super::*;
+    use crate::RandomSource;
 
     struct FixedRng(u8);
 
     impl RandomSource for FixedRng {
-        fn next_u8(&mut self) -> u8 { self.0 }
+        fn next_u8(&mut self) -> u8 {
+            self.0
+        }
     }
 
     fn emulator(fixed_rng: FixedRng) -> Emulator {
@@ -548,7 +571,10 @@ mod tests {
         emulator.reg[1] = 0;
         emulator.index = 4095;
         // height=2: row 0 reads mem[4095] (valid), row 1 reads mem[4096] (OOB)
-        assert!(matches!(emulator.execute(0xD012), Err(EmulatorError::MemoryOutOfBounds { .. })));
+        assert!(matches!(
+            emulator.execute(0xD012),
+            Err(EmulatorError::MemoryOutOfBounds { .. })
+        ));
     }
 
     // --- Stack: Call (2NNN) + Ret (00EE) ---
@@ -588,13 +614,19 @@ mod tests {
     fn test_stack_overflow() {
         let mut emu = emulator(FixedRng(0));
         emu.sp = 16;
-        assert!(matches!(emu.execute(0x2300), Err(EmulatorError::StackOverflow)));
+        assert!(matches!(
+            emu.execute(0x2300),
+            Err(EmulatorError::StackOverflow)
+        ));
     }
 
     #[test]
     fn test_stack_underflow() {
         let mut emu = emulator(FixedRng(0));
-        assert!(matches!(emu.execute(0x00EE), Err(EmulatorError::StackUnderflow)));
+        assert!(matches!(
+            emu.execute(0x00EE),
+            Err(EmulatorError::StackUnderflow)
+        ));
     }
 
     // --- Jump (1NNN) ---
@@ -622,7 +654,10 @@ mod tests {
         let mut emu = emulator(FixedRng(0));
         emu.reg[0] = 0xFF;
         // 0xFFF is valid alone, but 0xFFF - 2 + 0xFF = 4348 exceeds memory
-        assert!(matches!(emu.execute(0xBFFF), Err(EmulatorError::MemoryOutOfBounds { .. })));
+        assert!(matches!(
+            emu.execute(0xBFFF),
+            Err(EmulatorError::MemoryOutOfBounds { .. })
+        ));
     }
 
     // --- Skip Instructions ---
@@ -709,7 +744,10 @@ mod tests {
         emu.pc = 4094;
         emu.reg[0] = 0x42;
         // skip condition met → pc becomes 4096 > 4095 → OOB
-        assert!(matches!(emu.execute(0x3042), Err(EmulatorError::MemoryOutOfBounds { .. })));
+        assert!(matches!(
+            emu.execute(0x3042),
+            Err(EmulatorError::MemoryOutOfBounds { .. })
+        ));
     }
 
     // --- Load Immediate (6XNN) ---
@@ -943,14 +981,20 @@ mod tests {
     fn test_skip_if_pressed_invalid_key() {
         let mut emu = emulator(FixedRng(0));
         emu.reg[0] = 0x10; // key value > 0xF
-        assert!(matches!(emu.execute(0xE09E), Err(EmulatorError::InvalidKey { key: 0x10 })));
+        assert!(matches!(
+            emu.execute(0xE09E),
+            Err(EmulatorError::InvalidKey { key: 0x10 })
+        ));
     }
 
     #[test]
     fn test_skip_if_not_pressed_invalid_key() {
         let mut emu = emulator(FixedRng(0));
         emu.reg[0] = 0xFF;
-        assert!(matches!(emu.execute(0xE0A1), Err(EmulatorError::InvalidKey { key: 0xFF })));
+        assert!(matches!(
+            emu.execute(0xE0A1),
+            Err(EmulatorError::InvalidKey { key: 0xFF })
+        ));
     }
 
     // --- Timers (FX07, FX15, FX18) ---
@@ -1044,7 +1088,10 @@ mod tests {
         // needs 3 bytes at index: I, I+1, I+2
         // index 4094: I+2 = 4096 >= 4096 → OOB
         emu.index = 4094;
-        assert!(matches!(emu.execute(0xF033), Err(EmulatorError::MemoryOutOfBounds { .. })));
+        assert!(matches!(
+            emu.execute(0xF033),
+            Err(EmulatorError::MemoryOutOfBounds { .. })
+        ));
     }
 
     // --- Dump/Load Registers (FX55, FX65) ---
@@ -1105,14 +1152,20 @@ mod tests {
         let mut emu = emulator(FixedRng(0));
         emu.index = 4094;
         // dump V0-V3: needs indices 4094..4097, but 4094+3 = 4097 >= 4096 → OOB
-        assert!(matches!(emu.execute(0xF355), Err(EmulatorError::MemoryOutOfBounds { .. })));
+        assert!(matches!(
+            emu.execute(0xF355),
+            Err(EmulatorError::MemoryOutOfBounds { .. })
+        ));
     }
 
     #[test]
     fn test_load_registers_oob() {
         let mut emu = emulator(FixedRng(0));
         emu.index = 4094;
-        assert!(matches!(emu.execute(0xF365), Err(EmulatorError::MemoryOutOfBounds { .. })));
+        assert!(matches!(
+            emu.execute(0xF365),
+            Err(EmulatorError::MemoryOutOfBounds { .. })
+        ));
     }
 
     // --- Unknown Opcode ---
@@ -1120,13 +1173,19 @@ mod tests {
     #[test]
     fn test_unknown_opcode() {
         let mut emu = emulator(FixedRng(0));
-        assert!(matches!(emu.execute(0x0000), Err(EmulatorError::UnknownOpcode(0x0000))));
+        assert!(matches!(
+            emu.execute(0x0000),
+            Err(EmulatorError::UnknownOpcode(0x0000))
+        ));
     }
 
     #[test]
     fn test_unknown_opcode_bad_suffix() {
         let mut emu = emulator(FixedRng(0));
         // 0x5XY0 is valid, but 0x5XY1 is not
-        assert!(matches!(emu.execute(0x5001), Err(EmulatorError::UnknownOpcode(0x5001))));
+        assert!(matches!(
+            emu.execute(0x5001),
+            Err(EmulatorError::UnknownOpcode(0x5001))
+        ));
     }
 }
