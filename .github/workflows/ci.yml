@@ -71,9 +71,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - uses: cargo-bins/cargo-binstall@main
-      - name: install wasm-pack
-        run: cargo binstall -y wasm-pack
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'latest'
       - name: build wasm package
         run: wasm-pack build chip8-wasm --target bundler
       - uses: actions/setup-node@v4
