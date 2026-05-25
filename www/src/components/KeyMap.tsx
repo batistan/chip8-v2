@@ -11,18 +11,33 @@ export function KeyMap() {
   });
 
   return (
-    <div class="keymap-grid">
-      <For each={Object.entries(keyLabels())}>
-        {([code, label]) => {
-          const c8Val = defaultKeyMap[code]
-          return <Key
-            primary={label}
-            secondary={`0x${c8Val.toString(16).toLocaleUpperCase()}`}
-            isSelected={pressedKeys().has(c8Val)}
-          />
-        }}
-      </For>
-    </div>
+    <section class="window">
+      <div class="window-titlebar">
+        <span class="window-title">KEYMAP.CPL — Input</span>
+        <div class="window-controls">
+          <button type="button" class="window-control" aria-label="Minimize">_</button>
+          <button type="button" class="window-control" aria-label="Maximize">▢</button>
+          <button type="button" class="window-control" aria-label="Close">×</button>
+        </div>
+      </div>
+      <div class="window-body">
+        <div class="keymap-grid">
+          <For each={Object.entries(keyLabels())}>
+            {([code, label]) => {
+              const c8Val = defaultKeyMap[code];
+              return (
+                <Key
+                  primary={label}
+                  secondary={`0x${c8Val.toString(16).toLocaleUpperCase()}`}
+                  isSelected={pressedKeys().has(c8Val)}
+                />
+              );
+            }}
+          </For>
+        </div>
+        <div class="keymap-hint">QWERTY → CHIP-8 hex pad</div>
+      </div>
+    </section>
   );
 }
 
@@ -47,7 +62,7 @@ async function tryUpdateKeyMap(
   if (!navigator.keyboard) return;
 
   const layoutMap = await navigator.keyboard?.getLayoutMap()
-  
+
   if (!layoutMap) return;
 
   for (const [keyCode, physical] of layoutMap) {
