@@ -89,18 +89,33 @@ impl Chip8 {
         self.emulator.reset();
     }
 
-    // Internals accessors. These return copies so writes from JS to the
-    // resulting typed arrays do not propagate back to the emulator state.
-    pub fn registers(&self) -> Vec<u8> {
-        self.emulator.registers().to_vec()
+    // Internals accessors. Arrays are exposed as pointer + length pairs into
+    // wasm memory (matching the screen_ptr pattern) to avoid copying across
+    // the boundary. The Rust core only hands out immutable slices, so the
+    // returned regions are intended as read-only views — callers should not
+    // write through them.
+    pub fn registers_ptr(&self) -> *const u8 {
+        self.emulator.registers().as_ptr()
     }
 
-    pub fn memory(&self) -> Vec<u8> {
-        self.emulator.memory().to_vec()
+    pub fn registers_len(&self) -> usize {
+        self.emulator.registers().len()
     }
 
-    pub fn stack(&self) -> Vec<u16> {
-        self.emulator.stack().to_vec()
+    pub fn memory_ptr(&self) -> *const u8 {
+        self.emulator.memory().as_ptr()
+    }
+
+    pub fn memory_len(&self) -> usize {
+        self.emulator.memory().len()
+    }
+
+    pub fn stack_ptr(&self) -> *const u16 {
+        self.emulator.stack().as_ptr()
+    }
+
+    pub fn stack_len(&self) -> usize {
+        self.emulator.stack().len()
     }
 
     pub fn pc(&self) -> u16 {
