@@ -70,12 +70,24 @@ cargo audit
 
 CI runs on every pull request (and on every push to a branch with an open PR).
 Branches without an open PR don't trigger CI. The workflow at
-`.github/workflows/ci.yml` has two jobs gated by `dorny/paths-filter`:
+`.github/workflows/ci.yml` has two stack jobs gated by `dorny/paths-filter`
+plus a small aggregator:
 
 - **rust** — runs when files under `chip8-core/`, `chip8-wasm/`, or the cargo
   config change.
 - **www** — runs when files under `www/`, `chip8-core/`, or `chip8-wasm/`
   change (the wasm crates are inputs to the www build).
+- **ci-success** — always runs, depends on the other jobs, and succeeds only
+  if none of them failed or were cancelled. Skipped jobs (paths-filter said
+  "not my stack") count as success.
+
+### Branch protection
+
+GitHub Actions reports a status **per job**, not per workflow — so a branch
+protection rule that requires "ci" by workflow name would sit at "Waiting
+for status to be reported" forever. Require **`ci-success`** instead. It's
+the only check that's guaranteed to post on every PR regardless of which
+stack changed, and it gates on the real work being green.
 
 ## Weekly security audit
 

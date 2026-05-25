@@ -93,3 +93,25 @@ jobs:
       - name: test
         run: npm test -- --run
         working-directory: www
+
+  # Aggregator. Branch protection should require this single check —
+  # GitHub Actions only reports per-job, never per-workflow, so a rule that
+  # requires "ci" by workflow name would sit pending forever. This job runs
+  # on every PR (if: always()) and only succeeds when no upstream job
+  # failed or was cancelled. Skipped jobs (paths-filter said "not my stack")
+  # are treated as success.
+  ci-success:
+    name: ci-success
+    if: always()
+    needs: [changes, rust, www]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check upstream results
+        run: |
+          for r in "${{ needs.changes.result }}" "${{ needs.rust.result }}" "${{ needs.www.result }}"; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::Upstream job result: $r"; exit 1 ;;
+            esac
+          done
+          echo "All upstream jobs passed or were skipped."
