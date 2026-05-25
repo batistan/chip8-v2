@@ -88,6 +88,40 @@ impl Chip8 {
     pub fn reset(&mut self) {
         self.emulator.reset();
     }
+
+    // Internals accessors. These return copies so writes from JS to the
+    // resulting typed arrays do not propagate back to the emulator state.
+    pub fn registers(&self) -> Vec<u8> {
+        self.emulator.registers().to_vec()
+    }
+
+    pub fn memory(&self) -> Vec<u8> {
+        self.emulator.memory().to_vec()
+    }
+
+    pub fn stack(&self) -> Vec<u16> {
+        self.emulator.stack().to_vec()
+    }
+
+    pub fn pc(&self) -> u16 {
+        self.emulator.pc()
+    }
+
+    pub fn index(&self) -> u16 {
+        self.emulator.index()
+    }
+
+    pub fn sp(&self) -> u8 {
+        self.emulator.sp()
+    }
+
+    pub fn delay_timer(&self) -> u8 {
+        self.emulator.delay_timer()
+    }
+
+    pub fn sound_timer(&self) -> u8 {
+        self.emulator.sound_timer()
+    }
 }
 
 fn to_packed_num(value: TickOutput) -> u32 {

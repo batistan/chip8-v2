@@ -195,6 +195,38 @@ impl Emulator {
         SCREEN_HEIGHT
     }
 
+    pub fn registers(&self) -> &[u8] {
+        &self.reg
+    }
+
+    pub fn memory(&self) -> &[u8] {
+        &self.mem
+    }
+
+    pub fn stack(&self) -> &[u16] {
+        &self.stack
+    }
+
+    pub fn pc(&self) -> u16 {
+        self.pc
+    }
+
+    pub fn index(&self) -> u16 {
+        self.index
+    }
+
+    pub fn sp(&self) -> u8 {
+        self.sp
+    }
+
+    pub fn delay_timer(&self) -> u8 {
+        self.delay_timer
+    }
+
+    pub fn sound_timer(&self) -> u8 {
+        self.sound_timer
+    }
+
     pub fn reset(&mut self) {
         self.mem[FONT_OFFSET..FONT_OFFSET + font::FONT.len()].copy_from_slice(&font::FONT);
         self.pc = PC_START as u16;
@@ -456,5 +488,58 @@ mod tests {
         assert_eq!(screen.len(), SCREEN_WIDTH * SCREEN_HEIGHT);
         assert_eq!(screen[0], 1);
         assert_eq!(screen[100], 1);
+    }
+
+    // --- internals accessors ---
+
+    #[test]
+    fn test_registers_accessor() {
+        let mut emu = emu();
+        emu.reg[0] = 0xAA;
+        emu.reg[0xF] = 0xBB;
+
+        let regs = emu.registers();
+        assert_eq!(regs.len(), 16);
+        assert_eq!(regs[0], 0xAA);
+        assert_eq!(regs[0xF], 0xBB);
+    }
+
+    #[test]
+    fn test_memory_accessor() {
+        let mut emu = emu();
+        emu.load_rom(&[0x60, 0x42]).unwrap();
+
+        let mem = emu.memory();
+        assert_eq!(mem.len(), 4096);
+        assert_eq!(mem[PC_START], 0x60);
+        assert_eq!(mem[PC_START + 1], 0x42);
+    }
+
+    #[test]
+    fn test_stack_accessor() {
+        let mut emu = emu();
+        emu.stack[0] = 0x300;
+        emu.stack[1] = 0x400;
+
+        let stack = emu.stack();
+        assert_eq!(stack.len(), 16);
+        assert_eq!(stack[0], 0x300);
+        assert_eq!(stack[1], 0x400);
+    }
+
+    #[test]
+    fn test_scalar_accessors() {
+        let mut emu = emu();
+        emu.pc = 0x250;
+        emu.index = 0x300;
+        emu.sp = 3;
+        emu.delay_timer = 30;
+        emu.sound_timer = 20;
+
+        assert_eq!(emu.pc(), 0x250);
+        assert_eq!(emu.index(), 0x300);
+        assert_eq!(emu.sp(), 3);
+        assert_eq!(emu.delay_timer(), 30);
+        assert_eq!(emu.sound_timer(), 20);
     }
 }
