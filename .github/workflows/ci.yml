@@ -100,7 +100,7 @@ jobs:
   # on every PR (if: always()) and only succeeds when no upstream job
   # failed or was cancelled. Skipped jobs (paths-filter said "not my stack")
   # are treated as success.
-  ci-success:
+  ci:
     name: ci-success
     if: always()
     needs: [changes, rust, www]
