@@ -114,4 +114,4 @@ jobs:
               *) echo "::error::Upstream job result: $r"; exit 1 ;;
             esac
           done
-          echo "All upstream jobs passed or were skipped."
+          exit 0
