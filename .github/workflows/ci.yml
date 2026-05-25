@@ -101,7 +101,7 @@ jobs:
   # failed or was cancelled. Skipped jobs (paths-filter said "not my stack")
   # are treated as success.
   ci:
-    name: ci-success
+    name: ci
     if: always()
     needs: [changes, rust, www]
     runs-on: ubuntu-latest
