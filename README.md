@@ -45,7 +45,7 @@ cd www && npm install && npm run dev
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full check suite, the pre-commit hook, and how CI is set up.
 
-## Resources
+## Additional Resources
 
 - [Cowgod's CHIP-8 Technical Reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM): the classic opcode-by-opcode spec
 - [Guide to making a CHIP-8 emulator](https://tobiasvl.github.io/blog/write-a-chip-8-emulator/) by Tobias V. Langhoff: a walkthrough that explains the design without handing you code, and covers the quirks that differ between interpreters
