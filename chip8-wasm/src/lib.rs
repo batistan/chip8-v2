@@ -88,6 +88,55 @@ impl Chip8 {
     pub fn reset(&mut self) {
         self.emulator.reset();
     }
+
+    // Internals accessors. Arrays are exposed as pointer + length pairs into
+    // wasm memory (matching the screen_ptr pattern) to avoid copying across
+    // the boundary. The Rust core only hands out immutable slices, so the
+    // returned regions are intended as read-only views — callers should not
+    // write through them.
+    pub fn registers_ptr(&self) -> *const u8 {
+        self.emulator.registers().as_ptr()
+    }
+
+    pub fn registers_len(&self) -> usize {
+        self.emulator.registers().len()
+    }
+
+    pub fn memory_ptr(&self) -> *const u8 {
+        self.emulator.memory().as_ptr()
+    }
+
+    pub fn memory_len(&self) -> usize {
+        self.emulator.memory().len()
+    }
+
+    pub fn stack_ptr(&self) -> *const u16 {
+        self.emulator.stack().as_ptr()
+    }
+
+    pub fn stack_len(&self) -> usize {
+        self.emulator.stack().len()
+    }
+
+    pub fn pc(&self) -> u16 {
+        self.emulator.pc()
+    }
+
+    pub fn index(&self) -> u16 {
+        self.emulator.index()
+    }
+
+    pub fn sp(&self) -> u8 {
+        self.emulator.sp()
+    }
+
+    pub fn delay_timer(&self) -> u8 {
+        self.emulator.delay_timer()
+    }
+
+    pub fn sound_timer(&self) -> u8 {
+        self.emulator.sound_timer()
+    }
 }
 
 fn to_packed_num(value: TickOutput) -> u32 {
