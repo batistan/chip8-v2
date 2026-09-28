@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import type { Internals } from "./lib/internals";
 
 export type AppError = {
   id: string;
@@ -37,6 +38,18 @@ export const [emulationState, setEmulationState] =
 
 export type CurrentRom = { name: string; bytes: Uint8Array } | null;
 export const [currentRom, setCurrentRom] = createSignal<CurrentRom>(null);
+
+export const SPEEDS = [0.25, 0.5, 1, 2, 4] as const;
+export type Speed = (typeof SPEEDS)[number];
+export const [speed, setSpeed] = createSignal<Speed>(1);
+
+export const [internals, setInternals] = createSignal<Internals | null>(null);
+
+export function togglePause(): void {
+  setEmulationState((s) =>
+    s === "running" ? "paused" : s === "paused" ? "running" : s,
+  );
+}
 
 export const [fps, setFps] = createSignal<number>(0);
 

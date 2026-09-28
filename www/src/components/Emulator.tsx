@@ -1,6 +1,6 @@
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { For, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { updateScreen } from "../lib/renderer.ts";
-import { chip8, getScreen } from "../lib/chip8.ts";
+import { chip8, getScreen, readInternals } from "../lib/chip8.ts";
 import { setupInput } from "../lib/input.ts";
 import {
   addError,
@@ -9,6 +9,11 @@ import {
   emulationState,
   setCurrentRom,
   setEmulationState,
+  setInternals,
+  setSpeed,
+  speed,
+  SPEEDS,
+  togglePause,
 } from "../state.ts";
 
 export default function Emulator() {
@@ -54,6 +59,7 @@ export default function Emulator() {
       chip8.reset();
       chip8.load_rom(buffer);
       clearErrors();
+      setInternals(readInternals());
       setEmulationState("running");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -67,13 +73,25 @@ export default function Emulator() {
     let lastTime: number | null = null;
 
     const animationCallback = (time: number) => {
-      if (lastTime === null) {
+      if (lastTime === null || emulationState() !== "running") {
         lastTime = time;
+        animationId = requestAnimationFrame(animationCallback);
+        return;
       }
 
-      const delta = time - lastTime;
+      const delta = (time - lastTime) * speed();
 
-      const tickOutput = chip8.tick(delta);
+      let tickOutput: number;
+      try {
+        tickOutput = chip8.tick(delta);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        addError(msg);
+        setInternals(readInternals());
+        setEmulationState("error");
+        return;
+      }
+      setInternals(readInternals());
       const shouldDraw = tickOutput % 2;
       const soundActive = (tickOutput >> 1) % 2;
 
@@ -112,8 +130,42 @@ export default function Emulator() {
             height={chip8.screen_height() * scale()}
           />
         </div>
+        <Controls />
         <StatusBar />
       </div>
+    </div>
+  );
+}
+
+function Controls() {
+  const canToggle = () =>
+    emulationState() === "running" || emulationState() === "paused";
+
+  return (
+    <div class="toolbar" role="toolbar" aria-label="Emulation controls">
+      <button
+        type="button"
+        class="toolbar-button"
+        disabled={!canToggle()}
+        aria-pressed={emulationState() === "paused"}
+        onClick={togglePause}
+      >
+        {emulationState() === "paused" ? "▶ Resume" : "❚❚ Pause"}
+      </button>
+      <label class="toolbar-field">
+        Speed
+        <select
+          class="toolbar-select"
+          value={speed()}
+          onChange={({ currentTarget }) =>
+            setSpeed(SPEEDS[currentTarget.selectedIndex])
+          }
+        >
+          <For each={SPEEDS}>
+            {(s) => <option value={s}>{s}×</option>}
+          </For>
+        </select>
+      </label>
     </div>
   );
 }

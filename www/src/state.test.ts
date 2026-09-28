@@ -1,6 +1,14 @@
 // @vitest-environment node
 import { describe, test, expect, afterEach } from "vitest";
-import { addError, clearErrors, dismissError, getErrors } from "./state";
+import {
+  addError,
+  clearErrors,
+  dismissError,
+  emulationState,
+  getErrors,
+  setEmulationState,
+  togglePause,
+} from "./state";
 
 afterEach(() => clearErrors());
 
@@ -61,4 +69,25 @@ describe("dismissError", () => {
 
     expect(getErrors()).toHaveLength(1);
   });
+});
+
+describe("togglePause", () => {
+  afterEach(() => setEmulationState("stopped"));
+
+  test("should flip between running and paused", () => {
+    setEmulationState("running");
+    togglePause();
+    expect(emulationState()).toBe("paused");
+    togglePause();
+    expect(emulationState()).toBe("running");
+  });
+
+  test.each(["stopped", "error"] as const)(
+    "should leave %s untouched",
+    (state) => {
+      setEmulationState(state);
+      togglePause();
+      expect(emulationState()).toBe(state);
+    },
+  );
 });
