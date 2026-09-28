@@ -152,20 +152,25 @@ function Controls() {
       >
         {emulationState() === "paused" ? "▶ Resume" : "❚❚ Pause"}
       </button>
-      <label class="toolbar-field">
-        Speed
-        <select
-          class="toolbar-select"
-          value={speed()}
-          onChange={({ currentTarget }) =>
-            setSpeed(SPEEDS[currentTarget.selectedIndex])
-          }
-        >
+      <div class="toolbar-field" role="radiogroup" aria-labelledby="speed-label">
+        <span id="speed-label">Speed</span>
+        <div class="toolbar-group">
           <For each={SPEEDS}>
-            {(s) => <option value={s}>{s}×</option>}
+            {(s) => (
+              <label class="toolbar-toggle">
+                <input
+                  type="radio"
+                  name="speed"
+                  value={s}
+                  checked={speed() === s}
+                  onChange={() => setSpeed(s)}
+                />
+                {s}×
+              </label>
+            )}
           </For>
-        </select>
-      </label>
+        </div>
+      </div>
     </div>
   );
 }

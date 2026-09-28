@@ -747,11 +747,52 @@ a {
   gap: var(--s-3);
 }
 
-.toolbar-select {
+.toolbar-group {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.toolbar-toggle {
+  position: relative;
+  padding: 2px 6px;
+  min-width: 40px;
+  text-align: center;
   font-family: var(--mono);
-  background: var(--field-bg);
+  background: var(--chrome);
   border: 1px solid;
-  border-color: var(--chrome-shadow) var(--chrome-lighter)
-    var(--chrome-lighter) var(--chrome-shadow);
-  padding: 1px 2px;
+  border-color: var(--chrome-lighter) var(--chrome-shadow-dark)
+    var(--chrome-shadow-dark) var(--chrome-lighter);
+  box-shadow: inset 1px 1px 0 var(--chrome-light),
+    inset -1px -1px 0 var(--chrome-shadow);
+  cursor: default;
+  user-select: none;
+}
+
+.toolbar-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+}
+
+.toolbar-toggle:active,
+.toolbar-toggle:has(input:checked) {
+  border-color: var(--chrome-shadow-dark) var(--chrome-lighter)
+    var(--chrome-lighter) var(--chrome-shadow-dark);
+  box-shadow: inset 1px 1px 0 var(--chrome-shadow),
+    inset -1px -1px 0 var(--chrome-light);
+  padding: 3px 5px 1px 7px;
+}
+
+.toolbar-toggle:has(input:checked) {
+  background:
+    repeating-conic-gradient(var(--chrome) 0% 25%, var(--chrome-lighter) 0% 50%)
+    0 0 / 2px 2px;
+  font-weight: 700;
+}
+
+.toolbar-toggle:has(input:focus-visible) {
+  outline: 1px dotted var(--text);
+  outline-offset: -4px;
 }
