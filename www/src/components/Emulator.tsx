@@ -51,6 +51,39 @@ export default function Emulator() {
     });
   });
 
+  // runs a tick/step, then syncs the canvas and internals; false on emulator error
+  function runCpu(run: () => number): boolean {
+    let output: number;
+    try {
+      output = run();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      addError(msg);
+      setInternals(readInternals());
+      setEmulationState("error");
+      return false;
+    }
+    setInternals(readInternals());
+
+    const shouldDraw = output & 1;
+    const soundActive = output & 2;
+
+    if (shouldDraw) {
+      updateScreen(
+        canvasRef.getContext("2d")!,
+        getScreen(),
+        chip8.screen_width(),
+        scale(),
+      );
+    }
+
+    if (soundActive) {
+      // TODO sound context
+    }
+
+    return true;
+  }
+
   createEffect(() => {
     const buffer = currentRom()?.bytes;
     if (!buffer) return;
@@ -80,33 +113,7 @@ export default function Emulator() {
       }
 
       const delta = (time - lastTime) * speed();
-
-      let tickOutput: number;
-      try {
-        tickOutput = chip8.tick(delta);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        addError(msg);
-        setInternals(readInternals());
-        setEmulationState("error");
-        return;
-      }
-      setInternals(readInternals());
-      const shouldDraw = tickOutput % 2;
-      const soundActive = (tickOutput >> 1) % 2;
-
-      if (shouldDraw) {
-        updateScreen(
-          canvasRef.getContext("2d")!,
-          getScreen(),
-          chip8.screen_width(),
-          scale(),
-        );
-      }
-
-      if (soundActive) {
-        // TODO sound context
-      }
+      if (!runCpu(() => chip8.tick(delta))) return;
 
       lastTime = time;
       animationId = requestAnimationFrame(animationCallback);
@@ -130,14 +137,14 @@ export default function Emulator() {
             height={chip8.screen_height() * scale()}
           />
         </div>
-        <Controls />
+        <Controls onStep={() => runCpu(() => chip8.step())} />
         <StatusBar />
       </div>
     </div>
   );
 }
 
-function Controls() {
+function Controls(props: { onStep: () => void }) {
   const canToggle = () =>
     emulationState() === "running" || emulationState() === "paused";
 
@@ -151,6 +158,15 @@ function Controls() {
         onClick={togglePause}
       >
         {emulationState() === "paused" ? "▶ Resume" : "❚❚ Pause"}
+      </button>
+      <button
+        type="button"
+        class="toolbar-button"
+        disabled={emulationState() !== "paused"}
+        title="Execute one instruction"
+        onClick={() => props.onStep()}
+      >
+        ▶| Step
       </button>
       <div class="toolbar-field" role="radiogroup" aria-labelledby="speed-label">
         <span id="speed-label">Speed</span>

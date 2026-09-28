@@ -61,6 +61,13 @@ impl Chip8 {
         Ok(to_packed_num(tick_output))
     }
 
+    /// Executes a single CPU cycle. Returns the same packed flags as `tick`.
+    pub fn step(&mut self) -> Result<u32, JsError> {
+        let tick_output = self.emulator.step().map_err(to_js_error)?;
+
+        Ok(to_packed_num(tick_output))
+    }
+
     pub fn key_down(&mut self, key: u8) {
         self.emulator.key_down(key);
     }

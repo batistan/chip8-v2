@@ -104,8 +104,6 @@ impl Emulator {
     }
 
     pub fn tick(&mut self, delta_ms: f64) -> Result<TickOutput, EmulatorError> {
-        self.draw = false;
-
         // number of cycles is number seconds * cpu clock speed (cycles / second);
         // the fractional remainder carries over so small deltas still add up
         self.cycle_accum += (delta_ms / 1000.0) * self.cpu_hz;
@@ -115,16 +113,7 @@ impl Emulator {
         let mut should_update_screen = false;
 
         for _ in 0..num_cycles {
-            if self.waiting_input {
-                self.check_keys();
-            } else {
-                self.execute(self.next_instruction()?)?;
-                if self.draw {
-                    should_update_screen = true;
-                }
-
-                self.pc += 2;
-            }
+            should_update_screen |= self.cycle()?;
         }
 
         self.update_timers(delta_ms);
@@ -133,6 +122,32 @@ impl Emulator {
             screen_updated: should_update_screen,
             sound_active: self.sound_timer > 0,
         })
+    }
+
+    /// Runs exactly one CPU cycle, advancing the timers by one cycle's worth
+    /// of time so they stay in step with the CPU.
+    pub fn step(&mut self) -> Result<TickOutput, EmulatorError> {
+        let screen_updated = self.cycle()?;
+        self.update_timers(1000.0 / self.cpu_hz);
+
+        Ok(TickOutput {
+            screen_updated,
+            sound_active: self.sound_timer > 0,
+        })
+    }
+
+    // returns whether the screen changed
+    fn cycle(&mut self) -> Result<bool, EmulatorError> {
+        if self.waiting_input {
+            self.check_keys();
+            return Ok(false);
+        }
+
+        self.draw = false;
+        self.execute(self.next_instruction()?)?;
+        self.pc += 2;
+
+        Ok(self.draw)
     }
 
     fn next_instruction(&self) -> Result<u16, EmulatorError> {
@@ -363,6 +378,63 @@ mod tests {
         emu.reset();
         emu.tick(1.0).unwrap();
         assert_eq!(emu.pc, PC_START as u16);
+    }
+
+    #[test]
+    fn test_step_executes_one_instruction() {
+        let mut emu = emu();
+        emu.load_rom(&[0x60, 0x42, 0x61, 0x10]).unwrap();
+
+        emu.step().unwrap();
+        assert_eq!(emu.reg[0], 0x42);
+        assert_eq!(emu.reg[1], 0x00);
+        assert_eq!(emu.pc, PC_START as u16 + 2);
+
+        emu.step().unwrap();
+        assert_eq!(emu.reg[1], 0x10);
+        assert_eq!(emu.pc, PC_START as u16 + 4);
+    }
+
+    #[test]
+    fn test_step_reports_screen_updated() {
+        let mut emu = emu();
+        // CLS, then V0 = 0
+        emu.load_rom(&[0x00, 0xE0, 0x60, 0x00]).unwrap();
+
+        assert!(emu.step().unwrap().screen_updated);
+        assert!(!emu.step().unwrap().screen_updated);
+    }
+
+    #[test]
+    fn test_step_advances_timers_per_cycle() {
+        let mut emu = emu();
+        // JP 0x200: loop forever
+        emu.load_rom(&[0x12, 0x00]).unwrap();
+        emu.delay_timer = 5;
+
+        // at 500 Hz a timer tick (1/60 s) spans 8.33 cycles
+        for _ in 0..8 {
+            emu.step().unwrap();
+        }
+        assert_eq!(emu.delay_timer, 5);
+        emu.step().unwrap();
+        assert_eq!(emu.delay_timer, 4);
+    }
+
+    #[test]
+    fn test_step_waiting_for_input() {
+        let mut emu = emu();
+        emu.load_rom(&[0x60, 0x42]).unwrap();
+        emu.waiting_input = true;
+        emu.waiting_reg = 3;
+
+        emu.step().unwrap();
+        assert_eq!(emu.pc, PC_START as u16);
+
+        emu.key_down(0x7);
+        emu.step().unwrap();
+        assert_eq!(emu.reg[3], 0x7);
+        assert!(!emu.waiting_input);
     }
 
     #[test]
