@@ -616,6 +616,16 @@ a {
 }
 
 /* ------- Internals console ------- */
+.internals-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.internals-body .toolbar-field {
+  font-family: var(--mono);
+}
+
 .console {
   font-family: var(--mono);
   font-size: var(--fs-sm);
@@ -712,6 +722,7 @@ a {
   border: 1px solid;
   border-color: var(--chrome-lighter) var(--chrome-shadow)
     var(--chrome-shadow) var(--chrome-lighter);
+  font-family: var(--mono);
   font-size: var(--fs-sm);
 }
 
@@ -757,7 +768,6 @@ a {
   padding: 2px 6px;
   min-width: 40px;
   text-align: center;
-  font-family: var(--mono);
   background: var(--chrome);
   border: 1px solid;
   border-color: var(--chrome-lighter) var(--chrome-shadow-dark)

@@ -43,6 +43,9 @@ export const SPEEDS = [0.25, 0.5, 1, 2, 4] as const;
 export type Speed = (typeof SPEEDS)[number];
 export const [speed, setSpeed] = createSignal<Speed>(1);
 
+export type CodeView = "hex" | "asm";
+export const [codeView, setCodeView] = createSignal<CodeView>("hex");
+
 export const [internals, setInternals] = createSignal<Internals | null>(null);
 
 export function togglePause(): void {

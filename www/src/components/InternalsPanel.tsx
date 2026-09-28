@@ -1,6 +1,20 @@
 import { For, Index, Show } from "solid-js";
+import { disassemble } from "../lib/disasm";
 import { hex } from "../lib/internals";
-import { currentRom, emulationState, internals, speed } from "../state";
+import {
+  codeView,
+  currentRom,
+  emulationState,
+  internals,
+  setCodeView,
+  speed,
+  type CodeView,
+} from "../state";
+
+const CODE_VIEWS: readonly { value: CodeView; label: string }[] = [
+  { value: "hex", label: "HEX" },
+  { value: "asm", label: "ASM" },
+];
 
 export function InternalsPanel() {
   return (
@@ -13,19 +27,42 @@ export function InternalsPanel() {
           <button type="button" class="window-control" aria-label="Close">×</button>
         </div>
       </div>
-      <div class="window-body">
+      <div class="window-body internals-body">
+        <div class="toolbar-field" role="radiogroup" aria-labelledby="code-view-label">
+          <span id="code-view-label">Code</span>
+          <div class="toolbar-group">
+            <For each={CODE_VIEWS}>
+              {(view) => (
+                <label class="toolbar-toggle">
+                  <input
+                    type="radio"
+                    name="code-view"
+                    value={view.value}
+                    checked={codeView() === view.value}
+                    onChange={() => setCodeView(view.value)}
+                  />
+                  {view.label}
+                </label>
+              )}
+            </For>
+          </div>
+        </div>
         <pre class="console">{renderTrace()}</pre>
       </div>
     </section>
   );
 }
 
+function Label(props: { text: string }) {
+  return <span class="dim">{props.text}</span>;
+}
+
 function renderTrace() {
   return (
     <>
-      {"ROM   : "}{currentRom()?.name ?? "(none)"}{"\n"}
-      {"STATE : "}{emulationState().toUpperCase()}{"\n"}
-      {"SPEED : "}{speed()}×{"\n"}
+      <Label text="ROM   " />{currentRom()?.name ?? "(none)"}{"\n"}
+      <Label text="STATE " />{emulationState().toUpperCase()}{"\n"}
+      <Label text="SPEED " />{speed()}×{"\n"}
       <span class="dim">--</span>{"\n"}
       <Show
         when={internals()}
@@ -33,13 +70,16 @@ function renderTrace() {
       >
         {(cpu) => (
           <>
-            {`PC 0x${hex(cpu().pc, 4)}  I  0x${hex(cpu().index, 4)}\n`}
-            {`SP 0x${hex(cpu().sp, 2)}    DT ${hex(cpu().delayTimer, 2)}  ST ${hex(cpu().soundTimer, 2)}\n`}
+            <Label text="PC " />{`0x${hex(cpu().pc, 4)}  `}
+            <Label text="I  " />{`0x${hex(cpu().index, 4)}\n`}
+            <Label text="SP " />{`0x${hex(cpu().sp, 2)}    `}
+            <Label text="DT " />{`${hex(cpu().delayTimer, 2)}  `}
+            <Label text="ST " />{`${hex(cpu().soundTimer, 2)}\n`}
             <span class="dim">--</span>{"\n"}
             <Index each={cpu().registers}>
               {(value, i) => (
                 <>
-                  <span class="dim">V{hex(i, 1)}</span> {hex(value(), 2)}
+                  <Label text={`V${hex(i, 1)} `} />{hex(value(), 2)}
                   {i % 4 === 3 ? "\n" : "  "}
                 </>
               )}
@@ -49,7 +89,7 @@ function renderTrace() {
               <Index each={cpu().stack}>
                 {(addr, i) => (
                   <>
-                    {hex(i, 1)}: 0x{hex(addr(), 4)}{"\n"}
+                    <Label text={`${hex(i, 1)}: `} />{`0x${hex(addr(), 4)}\n`}
                   </>
                 )}
               </Index>
@@ -58,7 +98,9 @@ function renderTrace() {
             <For each={cpu().code}>
               {(line) => (
                 <span class={line.addr === cpu().pc ? "ok" : undefined}>
-                  {`${line.addr === cpu().pc ? ">" : " "}0x${hex(line.addr, 4)}  ${hex(line.opcode, 4)}\n`}
+                  {`${line.addr === cpu().pc ? ">" : " "}0x${hex(line.addr, 4)}  `}
+                  {codeView() === "asm" ? disassemble(line.opcode) : hex(line.opcode, 4)}
+                  {"\n"}
                 </span>
               )}
             </For>
