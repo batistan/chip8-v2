@@ -37,9 +37,11 @@
   /* Typography */
   --sans: Tahoma, "MS Sans Serif", Verdana, Geneva, sans-serif;
   --mono: "Courier New", Courier, ui-monospace, monospace;
+  --fs-xs: 10px;
   --fs-sm: 12px;
   --fs-md: 16px;
   --fs-lg: 24px;
+  --fs-xl: 32px;
   --lh: 1.4;
 
   /* Spacing */

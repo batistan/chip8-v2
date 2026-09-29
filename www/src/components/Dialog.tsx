@@ -1,4 +1,5 @@
-import { createEffect, type JSX } from "solid-js";
+import { createEffect, onCleanup, untrack, type JSX } from "solid-js";
+import { modalClosed, modalOpened } from "../state";
 
 interface DialogProps {
   title: string;
@@ -11,20 +12,42 @@ export function Dialog(props: DialogProps) {
   let dialogRef!: HTMLDialogElement;
   const titleId = `dialog-title-${Math.random().toString(36).substring(2, 8)}`;
 
+  let registered = false;
+
+  function unregister() {
+    if (!registered) return;
+    registered = false;
+    modalClosed();
+  }
+
   createEffect(() => {
     if (props.open && !dialogRef.open) {
       dialogRef.showModal();
+      if (!registered) {
+        registered = true;
+        untrack(modalOpened);
+      }
     } else if (!props.open && dialogRef.open) {
       dialogRef.close();
     }
   });
+
+  onCleanup(() => {
+    if (dialogRef.open) dialogRef.close();
+    unregister();
+  });
+
+  function handleClose() {
+    unregister();
+    props.onClose();
+  }
 
   return (
     <dialog
       ref={dialogRef}
       class="window dialog"
       aria-labelledby={titleId}
-      onClose={() => props.onClose()}
+      onClose={handleClose}
     >
       <div class="window-titlebar">
         <span id={titleId} class="window-title">{props.title}</span>
