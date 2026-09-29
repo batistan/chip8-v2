@@ -1,6 +1,6 @@
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { For, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { updateScreen } from "../lib/renderer.ts";
-import { chip8, getScreen } from "../lib/chip8.ts";
+import { chip8, getScreen, readInternals } from "../lib/chip8.ts";
 import { setupInput } from "../lib/input.ts";
 import {
   addError,
@@ -9,6 +9,11 @@ import {
   emulationState,
   setCurrentRom,
   setEmulationState,
+  setInternals,
+  setSpeed,
+  speed,
+  SPEEDS,
+  togglePause,
 } from "../state.ts";
 
 export default function Emulator() {
@@ -46,6 +51,39 @@ export default function Emulator() {
     });
   });
 
+  // runs a tick/step, then syncs the canvas and internals; false on emulator error
+  function runCpu(run: () => number): boolean {
+    let output: number;
+    try {
+      output = run();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      addError(msg);
+      setInternals(readInternals());
+      setEmulationState("error");
+      return false;
+    }
+    setInternals(readInternals());
+
+    const shouldDraw = output & 1;
+    const soundActive = output & 2;
+
+    if (shouldDraw) {
+      updateScreen(
+        canvasRef.getContext("2d")!,
+        getScreen(),
+        chip8.screen_width(),
+        scale(),
+      );
+    }
+
+    if (soundActive) {
+      // TODO sound context
+    }
+
+    return true;
+  }
+
   createEffect(() => {
     const buffer = currentRom()?.bytes;
     if (!buffer) return;
@@ -54,6 +92,7 @@ export default function Emulator() {
       chip8.reset();
       chip8.load_rom(buffer);
       clearErrors();
+      setInternals(readInternals());
       setEmulationState("running");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -67,28 +106,14 @@ export default function Emulator() {
     let lastTime: number | null = null;
 
     const animationCallback = (time: number) => {
-      if (lastTime === null) {
+      if (lastTime === null || emulationState() !== "running") {
         lastTime = time;
+        animationId = requestAnimationFrame(animationCallback);
+        return;
       }
 
-      const delta = time - lastTime;
-
-      const tickOutput = chip8.tick(delta);
-      const shouldDraw = tickOutput % 2;
-      const soundActive = (tickOutput >> 1) % 2;
-
-      if (shouldDraw) {
-        updateScreen(
-          canvasRef.getContext("2d")!,
-          getScreen(),
-          chip8.screen_width(),
-          scale(),
-        );
-      }
-
-      if (soundActive) {
-        // TODO sound context
-      }
+      const delta = (time - lastTime) * speed();
+      if (!runCpu(() => chip8.tick(delta))) return;
 
       lastTime = time;
       animationId = requestAnimationFrame(animationCallback);
@@ -112,7 +137,55 @@ export default function Emulator() {
             height={chip8.screen_height() * scale()}
           />
         </div>
+        <Controls onStep={() => runCpu(() => chip8.step())} />
         <StatusBar />
+      </div>
+    </div>
+  );
+}
+
+function Controls(props: { onStep: () => void }) {
+  const canToggle = () =>
+    emulationState() === "running" || emulationState() === "paused";
+
+  return (
+    <div class="toolbar" role="toolbar" aria-label="Emulation controls">
+      <button
+        type="button"
+        class="toolbar-button"
+        disabled={!canToggle()}
+        aria-pressed={emulationState() === "paused"}
+        onClick={togglePause}
+      >
+        {emulationState() === "paused" ? "▶ Resume" : "❚❚ Pause"}
+      </button>
+      <button
+        type="button"
+        class="toolbar-button"
+        disabled={emulationState() !== "paused"}
+        title="Execute one instruction"
+        onClick={() => props.onStep()}
+      >
+        ▶| Step
+      </button>
+      <div class="toolbar-field" role="radiogroup" aria-labelledby="speed-label">
+        <span id="speed-label">Speed</span>
+        <div class="toolbar-group">
+          <For each={SPEEDS}>
+            {(s) => (
+              <label class="toolbar-toggle">
+                <input
+                  type="radio"
+                  name="speed"
+                  value={s}
+                  checked={speed() === s}
+                  onChange={() => setSpeed(s)}
+                />
+                {s}×
+              </label>
+            )}
+          </For>
+        </div>
       </div>
     </div>
   );
