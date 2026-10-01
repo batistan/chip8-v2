@@ -86,14 +86,16 @@ interface RomCardProps {
 
 function RomCard(props: RomCardProps) {
   return (
-    <div
+    <button
+      type="button"
       class={"rom-item" + (props.isSelected ? " active" : "")}
+      aria-current={props.isSelected ? "true" : undefined}
       onClick={() => props.handleLoad(props.rom)}
     >
       <span class="rom-title">{props.rom.title}</span>
       <Show when={props.rom.description !== undefined}>
-        <p class="rom-desc">— {props.rom.description}</p>
+        <span class="rom-desc">— {props.rom.description}</span>
       </Show>
-    </div>
+    </button>
   );
 }

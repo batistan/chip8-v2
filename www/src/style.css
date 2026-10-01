@@ -538,6 +538,11 @@ a {
   color: #d6d6f0;
 }
 
+.rom-item:focus-visible {
+  outline: none;
+  border-color: currentColor;
+}
+
 .rom-title {
   font-weight: 700;
   flex-shrink: 0;
