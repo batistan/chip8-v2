@@ -94,6 +94,8 @@ export default function Emulator() {
       clearErrors();
       setInternals(readInternals());
       setEmulationState("running");
+      // keeps Space/Enter from re-activating the ROM button that loaded this game
+      canvasRef.focus();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       addError(msg);
@@ -133,6 +135,9 @@ export default function Emulator() {
           <canvas
             ref={canvasRef}
             class="canvas-screen"
+            tabIndex={-1}
+            role="img"
+            aria-label="CHIP-8 display"
             width={chip8.screen_width() * scale()}
             height={chip8.screen_height() * scale()}
           />
