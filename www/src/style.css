@@ -373,6 +373,10 @@ a {
   filter: drop-shadow(0 0 1px rgba(51, 255, 102, 0.6));
 }
 
+.canvas-screen:focus {
+  outline: none;
+}
+
 /* ------- Status bar (under canvas) ------- */
 .statusbar {
   display: flex;
@@ -579,6 +583,11 @@ a {
 
 .rom-item.active .rom-desc {
   color: #d6d6f0;
+}
+
+.rom-item:focus-visible {
+  outline: none;
+  border-color: currentColor;
 }
 
 .rom-title {
