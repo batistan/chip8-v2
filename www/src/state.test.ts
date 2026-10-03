@@ -6,6 +6,9 @@ import {
   dismissError,
   emulationState,
   getErrors,
+  isModalOpen,
+  modalClosed,
+  modalOpened,
   setEmulationState,
   togglePause,
 } from "./state";
@@ -90,4 +93,74 @@ describe("togglePause", () => {
       expect(emulationState()).toBe(state);
     },
   );
+});
+
+describe("modalOpened / modalClosed", () => {
+  afterEach(() => {
+    while (isModalOpen()) modalClosed();
+    setEmulationState("stopped");
+  });
+
+  test("should pause a running game and resume it on close", () => {
+    setEmulationState("running");
+
+    modalOpened();
+    expect(isModalOpen()).toBe(true);
+    expect(emulationState()).toBe("paused");
+
+    modalClosed();
+    expect(isModalOpen()).toBe(false);
+    expect(emulationState()).toBe("running");
+  });
+
+  test("should leave a game the user paused paused on close", () => {
+    setEmulationState("paused");
+
+    modalOpened();
+    modalClosed();
+
+    expect(emulationState()).toBe("paused");
+  });
+
+  test("should only resume once every open modal has closed", () => {
+    setEmulationState("running");
+
+    modalOpened();
+    modalOpened();
+    modalClosed();
+    expect(isModalOpen()).toBe(true);
+    expect(emulationState()).toBe("paused");
+
+    modalClosed();
+    expect(emulationState()).toBe("running");
+  });
+
+  test.each(["stopped", "error"] as const)(
+    "should leave %s untouched",
+    (state) => {
+      setEmulationState(state);
+      modalOpened();
+      expect(emulationState()).toBe(state);
+      modalClosed();
+      expect(emulationState()).toBe(state);
+    },
+  );
+
+  test("should not resume if the game stopped while the modal was open", () => {
+    setEmulationState("running");
+
+    modalOpened();
+    setEmulationState("error");
+    modalClosed();
+
+    expect(emulationState()).toBe("error");
+  });
+
+  test("an extra close should not drive the count negative", () => {
+    modalClosed();
+    expect(isModalOpen()).toBe(false);
+
+    modalOpened();
+    expect(isModalOpen()).toBe(true);
+  });
 });

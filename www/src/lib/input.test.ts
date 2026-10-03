@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Chip8 } from "chip8-wasm";
+import { isModalOpen, modalClosed, modalOpened } from "../state";
 import { defaultKeyMap, setupInput, type CleanupInputCallback } from "./input";
 
 function chip8Fake() {
@@ -111,6 +112,46 @@ describe("setupInput", () => {
     window.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(false);
+  });
+
+  describe("while a modal is open", () => {
+    afterEach(() => {
+      while (isModalOpen()) modalClosed();
+    });
+
+    test("keydown is ignored and not prevented", () => {
+      cleanup = setupInput(asChip8(chip8), { KeyA: 0x5 });
+      modalOpened();
+
+      const event = new KeyboardEvent("keydown", {
+        code: "KeyA",
+        cancelable: true,
+      });
+      window.dispatchEvent(event);
+
+      expect(chip8.key_down).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    test("keyup still releases a key held before the modal opened", () => {
+      cleanup = setupInput(asChip8(chip8), { KeyA: 0x5 });
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyA" }));
+      modalOpened();
+      window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyA" }));
+
+      expect(chip8.key_up).toHaveBeenCalledWith(0x5);
+    });
+
+    test("keydown works again once the modal closes", () => {
+      cleanup = setupInput(asChip8(chip8), { KeyA: 0x5 });
+      modalOpened();
+      modalClosed();
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyA" }));
+
+      expect(chip8.key_down).toHaveBeenCalledWith(0x5);
+    });
   });
 
   test("cleanup removes both keydown and keyup listeners", () => {

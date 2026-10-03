@@ -1,5 +1,5 @@
 import type { Chip8 } from "chip8-wasm";
-import { setPressedKeys } from "../state";
+import { isModalOpen, setPressedKeys } from "../state";
 
 export const defaultKeyMap: Record<string, number> = {
   Digit1: 0x1,
@@ -52,6 +52,9 @@ function handleKeyPress(
   const key = keyMap[event.code];
 
   if (key === undefined) return;
+
+  // keyups still go through so a key held when a modal opened doesn't stay stuck down
+  if (action === "keydown" && isModalOpen()) return;
 
   event.preventDefault();
 

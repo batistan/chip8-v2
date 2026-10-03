@@ -54,6 +54,32 @@ export function togglePause(): void {
   );
 }
 
+const [openModalCount, setOpenModalCount] = createSignal(0);
+let resumeWhenModalsClose = false;
+
+export function isModalOpen(): boolean {
+  return openModalCount() > 0;
+}
+
+// pauses a running game while any modal is open, and resumes it only if the modal was what paused it
+export function modalOpened(): void {
+  if (openModalCount() === 0 && emulationState() === "running") {
+    setEmulationState("paused");
+    resumeWhenModalsClose = true;
+  }
+  setOpenModalCount((n) => n + 1);
+}
+
+export function modalClosed(): void {
+  setOpenModalCount((n) => Math.max(0, n - 1));
+  if (openModalCount() > 0 || !resumeWhenModalsClose) return;
+
+  resumeWhenModalsClose = false;
+  if (emulationState() === "paused") {
+    setEmulationState("running");
+  }
+}
+
 export const [fps, setFps] = createSignal<number>(0);
 
 export const [scale, setScale] = createSignal<number>(10);
